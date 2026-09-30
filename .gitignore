@@ -1,0 +1,16 @@
+# Local credentials and configuration
+cookies.txt
+settings.json
+config.toml
+.env
+
+# Runtime state
+notification-state/
+data/
+
+# .NET build output
+bin/
+obj/
+
+*.db
+pastNotifs.json
