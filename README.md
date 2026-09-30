@@ -27,6 +27,17 @@ Edit `settings.json`:
 | `notifyOn` | All types | Notification types: `submissions`, `watches`, `comments`, `favorites`, `journals`, `notes`. |
 | `notificationPrefix` | Empty | Optional text prepended to Discord messages. |
 | `userAgent` | Firefox UA | User-Agent sent to FurAffinity. |
+| `useFlareSolverr` | `false` | Use the optional browser-based FlareSolverr service to fetch FA pages. |
+
+## Optional Cloudflare Solver
+
+FlareSolverr runs a separate Chromium-based browser and uses more memory than the notifier. To enable it, set `useFlareSolverr` to `true` in `settings.json`, then start the solver profile:
+
+```sh
+docker compose --profile solver up -d --build
+```
+
+The solver API is only available on the private Compose network; do not publish its port. FA cookies are sent to that local browser service. FlareSolverr can handle some browser challenges, but it may still fail if FA blocks the server's IP or requires a CAPTCHA.
 
 If Fur Affinity redirects to login, refresh `cookies.txt` and restart the container. Failed checks and failed Discord sends do not replace the saved notification state.
 

@@ -8,3 +8,12 @@ services:
       - ./cookies.txt:/app/cookies.txt:ro
       - ./settings.json:/app/settings.json:ro
       - ./notification-state:/data
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.2
+    profiles: [solver]
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: error
+      LOG_HTML: "false"
+      DISABLE_MEDIA: "true"
