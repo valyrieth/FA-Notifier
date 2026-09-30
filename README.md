@@ -39,7 +39,13 @@ docker compose --profile solver up -d --build
 
 The solver API is only available on the private Compose network; do not publish its port. FA cookies are sent to that local browser service. FlareSolverr can handle some browser challenges, but it may still fail if FA blocks the server's IP or requires a CAPTCHA.
 
-If Fur Affinity redirects to login, refresh `cookies.txt` and restart the container. Failed checks and failed Discord sends do not replace the saved notification state.
+## Discord Notifications
+
+New items are sent as individual Discord embeds with their category, title, link, and available author/profile or submission artwork details. When the page provides an image or user icon, it is included in the embed. Large batches are split to respect Discord's embed limits.
+
+The first detail-aware check sends current unread items and stores their stable IDs in `./notification-state/notifications.json`. Later checks skip items already delivered. Here, “seen” means successfully sent by this notifier; it is not a Discord read receipt or a mark-as-read action on Fur Affinity. If a category's row markup is not recognized, the notifier falls back to a count-only alert. Failed checks and failed Discord sends do not replace the saved state.
+
+If Fur Affinity redirects to login, refresh `cookies.txt` and restart the container.
 
 ## Security
 
