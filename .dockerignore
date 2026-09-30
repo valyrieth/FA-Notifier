@@ -1,0 +1,9 @@
+.git
+.env
+cookies.txt
+config.toml
+config_example.toml
+settings.json
+bin
+obj
+notification-state

@@ -1,0 +1,10 @@
+services:
+  fa-notify:
+    build: .
+    restart: unless-stopped
+    environment:
+      FA_NOTIFY_CONFIG: /app/settings.json
+    volumes:
+      - ./cookies.txt:/app/cookies.txt:ro
+      - ./settings.json:/app/settings.json:ro
+      - ./notification-state:/data
