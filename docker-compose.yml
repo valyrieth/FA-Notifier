@@ -7,7 +7,8 @@ services:
     volumes:
       - ./cookies.txt:/app/cookies.txt:ro
       - ./settings.json:/app/settings.json:ro
-      - ./notification-state:/data
+      - ./fa-notifier/data:/data
+      - ./fa-notifier/logs:/logs
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:v3.5.2

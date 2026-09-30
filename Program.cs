@@ -5,7 +5,23 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 
-var config = AppConfig.Load();
+const int RegisteredUserThreshold = 15000;
+const int LowTrafficIntervalMinutes = 1;
+
+var logPath = Path.Combine("/logs", $"fa-notify-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.log");
+using var logger = new AppLogger(logPath);
+logger.Info($"Writing this run's log to {logPath}.");
+AppConfig config;
+try
+{
+    config = AppConfig.Load();
+}
+catch (Exception exception)
+{
+    logger.Error($"Configuration loading failed: {exception.Message}");
+    throw;
+}
+
 var cookieContainer = CookieFile.Load(config.CookieFile);
 using var handler = new HttpClientHandler { CookieContainer = cookieContainer };
 using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
@@ -13,6 +29,9 @@ using var solverClient = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
 httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(config.UserAgent);
 
 var state = StateFile.Load(config.StateFile);
+var fastPolling = false;
+var startupStatusLogged = false;
+var failureAlertSent = false;
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -22,64 +41,130 @@ Console.CancelKeyPress += (_, eventArgs) =>
 
 if (config.UseFlareSolverr)
 {
-    await FlareSolverr.WaitUntilReadyAsync(solverClient, cancellation.Token);
+    await FlareSolverr.WaitUntilReadyAsync(solverClient, logger, cancellation.Token);
 }
 
-Console.WriteLine($"FA Notify started. Checking every {config.IntervalMinutes} minutes.");
+logger.Info($"FA Notify started. Normal check interval: {config.IntervalMinutes} minutes.");
 while (!cancellation.IsCancellationRequested)
 {
     try
     {
+        logger.Debug($"Starting Fur Affinity check. Initial item sync: {!state.ItemsInitialized}.");
         var snapshot = await FaNotifications.FetchAsync(
             httpClient,
             solverClient,
             cookieContainer,
             config.UseFlareSolverr,
+            logger,
             state.Counts,
             !state.ItemsInitialized,
             cancellation.Token);
-        var newItems = snapshot.Items
-            .Where(item => config.NotifyOn.Contains(item.Type))
-            .Where(item => !state.SeenItems.ContainsKey(item.Id))
-            .ToList();
+        logger.Debug($"Snapshot received: registered users={snapshot.RegisteredUsers:N0}; category counts=[{string.Join(", ", snapshot.Counts.Select(pair => $"{pair.Key}={pair.Value}"))}]; parsed items={snapshot.Items.Count}; count fallbacks={snapshot.CountFallbacks.Count}.");
+        var wasFastPolling = fastPolling;
+        fastPolling = snapshot.RegisteredUsers < RegisteredUserThreshold;
+
+        if (!startupStatusLogged)
+        {
+            var status = fastPolling
+                ? $"Fur Affinity reports {snapshot.RegisteredUsers:N0} registered users online, below {RegisteredUserThreshold:N0}. Polling every minute until the count reaches at least {RegisteredUserThreshold:N0}."
+                : $"Fur Affinity reports {snapshot.RegisteredUsers:N0} registered users online. Polling every {config.IntervalMinutes} minutes.";
+            logger.Info(status);
+            startupStatusLogged = true;
+        }
+        else if (wasFastPolling != fastPolling)
+        {
+            var status = fastPolling
+                ? $"Fur Affinity reports {snapshot.RegisteredUsers:N0} registered users online, below {RegisteredUserThreshold:N0}. Switching to one-minute polling."
+                : $"Fur Affinity reports {snapshot.RegisteredUsers:N0} registered users online, at or above {RegisteredUserThreshold:N0}. Resuming the normal {config.IntervalMinutes}-minute polling interval.";
+            logger.Info(status);
+        }
+
+        var newItems = new List<NotificationItem>();
+        foreach (var item in snapshot.Items)
+        {
+            if (!config.NotifyOn.Contains(item.Type))
+            {
+                logger.Debug($"Skipping disabled notification type={item.Type}, id={item.Id}.");
+                continue;
+            }
+
+            if (state.SeenItems.ContainsKey(item.Id))
+            {
+                logger.Debug($"Skipping previously delivered notification type={item.Type}, id={item.Id}, title=\"{item.Title}\".");
+                continue;
+            }
+
+            newItems.Add(item);
+        }
 
         foreach (var type in snapshot.CountFallbacks)
         {
             var count = snapshot.Counts.GetValueOrDefault(type);
             var fallbackId = $"count:{type}:{count}";
-            if (config.NotifyOn.Contains(type) && !state.SeenItems.ContainsKey(fallbackId))
+            if (!config.NotifyOn.Contains(type))
             {
-                newItems.Add(new NotificationItem(
-                    fallbackId,
-                    type,
-                    $"{char.ToUpperInvariant(type[0]) + type[1..]} notification count changed",
-                    $"There are {count} unread notifications. FA's item details were not recognized on this page.",
-                    snapshot.CategoryUrls.GetValueOrDefault(type, new Uri("https://www.furaffinity.net/" )).ToString(),
-                    null,
-                    null,
-                    null));
+                logger.Debug($"Skipping count-only fallback for disabled notification type={type}.");
+                continue;
             }
+
+            if (state.SeenItems.ContainsKey(fallbackId))
+            {
+                logger.Debug($"Skipping previously delivered count-only fallback type={type}, count={count}.");
+                continue;
+            }
+
+            logger.Debug($"Creating count-only fallback for type={type}, count={count}.");
+            newItems.Add(new NotificationItem(
+                fallbackId,
+                type,
+                $"{char.ToUpperInvariant(type[0]) + type[1..]} notification count changed",
+                $"There are {count} unread notifications. FA's item details were not recognized on this page.",
+                snapshot.CategoryUrls.GetValueOrDefault(type, new Uri("https://www.furaffinity.net/")).ToString(),
+                null,
+                null,
+                null));
         }
 
         if (newItems.Count > 0)
         {
-            await DiscordWebhook.SendAsync(httpClient, config.WebhookUrl, config.NotificationPrefix, newItems, cancellation.Token);
+            await DiscordWebhook.SendAsync(httpClient, logger, config.WebhookUrl, config.NotificationPrefix, newItems, cancellation.Token);
             foreach (var item in newItems)
             {
                 state.SeenItems[item.Id] = DateTimeOffset.UtcNow;
             }
 
-            Console.WriteLine($"Sent {newItems.Count} new notification item(s).");
+            logger.Info($"Sent {newItems.Count} new notification item(s).");
         }
         else
         {
-            Console.WriteLine("No new notifications.");
+            logger.Info("No new notifications.");
         }
 
         state.Counts = snapshot.Counts;
         state.ItemsInitialized = true;
         state.TrimSeenItems();
         StateFile.Save(config.StateFile, state);
+        logger.Debug($"Notification state saved: {state.SeenItems.Count} delivered item ID(s) retained.");
+
+        if (failureAlertSent)
+        {
+            try
+            {
+                await DiscordWebhook.SendAsync(
+                    httpClient,
+                    logger,
+                    config.WebhookUrl,
+                    config.NotificationPrefix,
+                    [new NotificationItem("status:check-recovered", "status", "FurAffinity checks recovered", "A FurAffinity check completed successfully. Polling has resumed.", "https://www.furaffinity.net/", null, null, null)],
+                    cancellation.Token);
+                logger.Info("Sent check-recovery alert to Discord.");
+                failureAlertSent = false;
+            }
+            catch (Exception alertException)
+            {
+                logger.Error($"Could not send check-recovery alert to Discord: {alertException.Message}");
+            }
+        }
     }
     catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
     {
@@ -87,17 +172,75 @@ while (!cancellation.IsCancellationRequested)
     }
     catch (Exception exception)
     {
-        Console.Error.WriteLine($"Check failed: {exception.Message}");
+        logger.Error($"Check failed: {exception.Message}");
+        if (!failureAlertSent)
+        {
+            try
+            {
+                await DiscordWebhook.SendAsync(
+                    httpClient,
+                    logger,
+                    config.WebhookUrl,
+                    config.NotificationPrefix,
+                    [new NotificationItem("status:check-failed", "status", "FurAffinity check failed", "A FurAffinity check failed. Your session cookies may have expired. Refresh cookies.txt and check the application logs for details.", "https://www.furaffinity.net/", null, null, null)],
+                    cancellation.Token);
+                logger.Info("Sent check-failure alert to Discord.");
+                failureAlertSent = true;
+            }
+            catch (Exception alertException)
+            {
+                logger.Error($"Could not send check-failure alert to Discord: {alertException.Message}");
+            }
+        }
+        else
+        {
+            logger.Debug("Check is still failing; the failure alert was already sent for this outage.");
+        }
     }
 
     try
     {
-        await Task.Delay(TimeSpan.FromMinutes(config.IntervalMinutes), cancellation.Token);
+        var nextIntervalMinutes = fastPolling ? LowTrafficIntervalMinutes : config.IntervalMinutes;
+        logger.Info($"Next check in {nextIntervalMinutes} minute(s).");
+        await Task.Delay(TimeSpan.FromMinutes(nextIntervalMinutes), cancellation.Token);
     }
     catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
     {
         break;
     }
+}
+
+internal sealed class AppLogger : IDisposable
+{
+    private readonly object gate = new();
+    private readonly StreamWriter file;
+
+    public AppLogger(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        file = new StreamWriter(new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+        {
+            AutoFlush = true
+        };
+    }
+
+    public void Info(string message) => Write("INFO", message, Console.Out);
+
+    public void Debug(string message) => Write("DEBUG", message, Console.Out);
+
+    public void Error(string message) => Write("ERROR", message, Console.Error);
+
+    private void Write(string level, string message, TextWriter console)
+    {
+        var entry = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} [{level}] {message}";
+        lock (gate)
+        {
+            console.WriteLine(entry);
+            file.WriteLine(entry);
+        }
+    }
+
+    public void Dispose() => file.Dispose();
 }
 
 internal sealed record AppConfig(
@@ -169,6 +312,7 @@ internal sealed record NotificationItem(
     string? ActorIconUrl = null);
 
 internal sealed record NotificationSnapshot(
+    int RegisteredUsers,
     Dictionary<string, int> Counts,
     Dictionary<string, Uri> CategoryUrls,
     List<NotificationItem> Items,
@@ -260,12 +404,14 @@ internal static class FaNotifications
         HttpClient solverClient,
         CookieContainer cookieContainer,
         bool useFlareSolverr,
+        AppLogger logger,
         IReadOnlyDictionary<string, int> previousCounts,
         bool initialSync,
         CancellationToken cancellationToken)
     {
-        var homePage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, HomePage, cancellationToken);
+        var homePage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, logger, HomePage, cancellationToken);
         var document = ParseDocument(homePage);
+        var registeredUsers = ParseRegisteredUserCount(document);
 
         var notifications = NotificationTypes.ToDictionary(type => type, _ => 0);
         var categoryUrls = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase);
@@ -299,19 +445,26 @@ internal static class FaNotifications
         var countFallbacks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var type in NotificationTypes)
         {
-            if (notifications[type] <= 0
-                || (!initialSync && notifications[type] <= previousCounts.GetValueOrDefault(type)))
+            var currentCount = notifications[type];
+            if (currentCount <= 0)
             {
+                continue;
+            }
+
+            if (!initialSync && currentCount <= previousCounts.GetValueOrDefault(type))
+            {
+                logger.Debug($"No new {type} count increase: current={currentCount}, previous={previousCounts.GetValueOrDefault(type)}.");
                 continue;
             }
 
             if (!categoryUrls.TryGetValue(type, out var categoryUrl))
             {
+                logger.Debug($"No category URL found for {type}; using a count-only fallback.");
                 countFallbacks.Add(type);
                 continue;
             }
 
-            var detailPage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, categoryUrl, cancellationToken);
+            var detailPage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, logger, categoryUrl, cancellationToken);
             var detailDocument = ParseDocument(detailPage);
             var section = detailDocument.DocumentNode.SelectSingleNode($"//*[@id='messages-{type}']") ?? detailDocument.DocumentNode;
             var rows = GetRows(section, type);
@@ -322,15 +475,28 @@ internal static class FaNotifications
 
             if (pageItems.Length == 0)
             {
+                logger.Debug($"Parsed no {type} notification items from {rows?.Count ?? 0} row(s); using a count-only fallback.");
                 countFallbacks.Add(type);
             }
             else
             {
+                logger.Debug($"Parsed {pageItems.Length} {type} notification item(s).");
                 items.AddRange(pageItems);
             }
         }
 
-        return new NotificationSnapshot(notifications, categoryUrls, items, countFallbacks);
+        return new NotificationSnapshot(registeredUsers, notifications, categoryUrls, items, countFallbacks);
+    }
+
+    private static int ParseRegisteredUserCount(HtmlDocument document)
+    {
+        var match = Regex.Match(document.DocumentNode.InnerText, @"(?<count>\d[\d,]*)\s+registered\b", RegexOptions.IgnoreCase);
+        if (!match.Success || !int.TryParse(match.Groups["count"].Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var count))
+        {
+            throw new InvalidDataException("Could not read Fur Affinity's registered-user count; notification state was not updated.");
+        }
+
+        return count;
     }
 
     private static async Task<(HttpStatusCode StatusCode, string Html, Uri Uri)> DownloadPageAsync(
@@ -338,17 +504,24 @@ internal static class FaNotifications
         HttpClient solverClient,
         CookieContainer cookieContainer,
         bool useFlareSolverr,
+        AppLogger logger,
         Uri target,
         CancellationToken cancellationToken)
     {
+        logger.Debug($"Fetching Fur Affinity page {target.Host}{target.AbsolutePath} via {(useFlareSolverr ? "FlareSolverr" : "HTTP client")}.");
         if (useFlareSolverr)
         {
             var page = await FlareSolverr.FetchPageAsync(solverClient, target, cookieContainer, cancellationToken);
-            return (page.StatusCode, page.Html, page.FinalUri ?? target);
+            var finalUri = page.FinalUri ?? target;
+            logger.Debug($"Received HTTP {(int)page.StatusCode} from {finalUri.Host}{finalUri.AbsolutePath} ({page.Html.Length} characters).");
+            return (page.StatusCode, page.Html, finalUri);
         }
 
         using var response = await client.GetAsync(target, cancellationToken);
-        return (response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken), response.RequestMessage?.RequestUri ?? target);
+        var html = await response.Content.ReadAsStringAsync(cancellationToken);
+        var responseUri = response.RequestMessage?.RequestUri ?? target;
+        logger.Debug($"Received HTTP {(int)response.StatusCode} from {responseUri.Host}{responseUri.AbsolutePath} ({html.Length} characters).");
+        return (response.StatusCode, html, responseUri);
     }
 
     private static HtmlDocument ParseDocument((HttpStatusCode StatusCode, string Html, Uri Uri) page)
@@ -544,7 +717,7 @@ internal static class FlareSolverr
 {
     private static readonly Uri ServiceUrl = new("http://flaresolverr:8191/v1");
 
-    public static async Task WaitUntilReadyAsync(HttpClient client, CancellationToken cancellationToken)
+    public static async Task WaitUntilReadyAsync(HttpClient client, AppLogger logger, CancellationToken cancellationToken)
     {
         var serviceRoot = new Uri(ServiceUrl, "/");
         for (var attempt = 0; attempt < 24; attempt++)
@@ -554,7 +727,7 @@ internal static class FlareSolverr
                 using var response = await client.GetAsync(serviceRoot, cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine("FlareSolverr is ready.");
+                    logger.Info("FlareSolverr is ready.");
                     return;
                 }
             }
@@ -562,7 +735,7 @@ internal static class FlareSolverr
             {
             }
 
-            Console.WriteLine("Waiting for FlareSolverr to start...");
+            logger.Info("Waiting for FlareSolverr to start...");
             await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
         }
 
@@ -624,6 +797,7 @@ internal static class DiscordWebhook
 {
     public static async Task SendAsync(
         HttpClient client,
+        AppLogger logger,
         string webhookUrl,
         string prefix,
         IReadOnlyList<NotificationItem> notifications,
@@ -631,6 +805,7 @@ internal static class DiscordWebhook
     {
         foreach (var (batch, index) in notifications.Chunk(10).Select((items, index) => (items, index)))
         {
+            logger.Debug($"Sending Discord batch {index + 1} with {batch.Length} notification(s).");
             var embeds = batch.Select(notification =>
             {
                 var embed = new Dictionary<string, object>
@@ -687,6 +862,10 @@ internal static class DiscordWebhook
 
             using var response = await client.PostAsJsonAsync(webhookUrl, payload, cancellationToken);
             response.EnsureSuccessStatusCode();
+            foreach (var notification in batch)
+            {
+                logger.Info($"Discord accepted notification: type={notification.Type}, id={notification.Id}, title=\"{notification.Title}\".");
+            }
         }
     }
 
