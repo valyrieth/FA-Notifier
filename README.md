@@ -14,7 +14,9 @@ A .NET 10 worker that checks Fur Affinity notifications and posts them to Discor
    docker compose up -d --build
    ```
 
-View logs with `docker compose logs -f` or read the newest `./logs/fa-notify-*.log` file on the host. A uniquely named log file is created in the persisted `./logs` folder on every boot. DEBUG entries include page responses, parsed counts, deduplication decisions, fallback reasons, Discord batches, and state saves. Each notification is logged as delivered only after Discord accepts its batch. Stop it with `docker compose down`; notification history is kept in `./notification-state/notifications.json` between restarts.
+View logs with `docker compose logs -f` or read the newest `./logs/fa-notify-*.log` file on the host. A uniquely named log file is created in the persisted `./logs` folder on every boot. Set `logLevel` to `Debug` to include page responses, parsed counts, deduplication decisions, fallback reasons, Discord batches, and state saves. Each notification is logged as delivered only after Discord accepts its batch. Stop it with `docker compose down`; notification history is kept in `./notification-state/notifications.json` between restarts.
+
+The notifier runs as a non-root user with `PUID=1000` and `PGID=1000` by default. Set these environment variables to match your host user, for example `PUID=$(id -u) PGID=$(id -g) docker compose up -d --build`. The entrypoint assigns the writable data and log directories to these IDs before dropping privileges.
 
 ## Settings
 
@@ -24,6 +26,7 @@ Edit `settings.json`:
 | --- | --- | --- |
 | `discordWebhookUrl` | Required | Discord channel webhook URL. Keep it private. |
 | `pollIntervalMinutes` | `30` | Normal check interval. Below 15,000 registered users online, checks switch to once per minute until the count reaches 15,000. |
+| `logLevel` | `Information` | Minimum log level: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical`, or `None`. |
 | `notifyOn` | All types | Notification types: `submissions`, `watches`, `comments`, `favorites`, `journals`, `notes`. |
 | `notificationPrefix` | Empty | Optional text prepended to Discord messages. |
 | `userAgent` | Firefox UA | User-Agent sent to FurAffinity. |

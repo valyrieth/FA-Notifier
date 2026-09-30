@@ -15,6 +15,7 @@ AppConfig config;
 try
 {
     config = AppConfig.Load();
+    logger.SetMinimumLevel(config.LogLevel);
 }
 catch (Exception exception)
 {
@@ -214,6 +215,7 @@ internal sealed class AppLogger : IDisposable
 {
     private readonly object gate = new();
     private readonly StreamWriter file;
+    private AppLogLevel minimumLevel = AppLogLevel.Information;
 
     public AppLogger(string path)
     {
@@ -224,15 +226,29 @@ internal sealed class AppLogger : IDisposable
         };
     }
 
-    public void Info(string message) => Write("INFO", message, Console.Out);
+    public void SetMinimumLevel(AppLogLevel level) => minimumLevel = level;
 
-    public void Debug(string message) => Write("DEBUG", message, Console.Out);
+    public void Trace(string message) => Write(AppLogLevel.Trace, message);
 
-    public void Error(string message) => Write("ERROR", message, Console.Error);
+    public void Debug(string message) => Write(AppLogLevel.Debug, message);
 
-    private void Write(string level, string message, TextWriter console)
+    public void Info(string message) => Write(AppLogLevel.Information, message);
+
+    public void Warning(string message) => Write(AppLogLevel.Warning, message);
+
+    public void Error(string message) => Write(AppLogLevel.Error, message);
+
+    public void Critical(string message) => Write(AppLogLevel.Critical, message);
+
+    private void Write(AppLogLevel level, string message)
     {
+        if (level < minimumLevel || minimumLevel == AppLogLevel.None)
+        {
+            return;
+        }
+
         var entry = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} [{level}] {message}";
+        var console = level >= AppLogLevel.Warning ? Console.Error : Console.Out;
         lock (gate)
         {
             console.WriteLine(entry);
@@ -243,6 +259,17 @@ internal sealed class AppLogger : IDisposable
     public void Dispose() => file.Dispose();
 }
 
+internal enum AppLogLevel
+{
+    Trace,
+    Debug,
+    Information,
+    Warning,
+    Error,
+    Critical,
+    None
+}
+
 internal sealed record AppConfig(
     string CookieFile,
     string StateFile,
@@ -250,6 +277,7 @@ internal sealed record AppConfig(
     string UserAgent,
     string NotificationPrefix,
     int IntervalMinutes,
+    AppLogLevel LogLevel,
     bool UseFlareSolverr,
     HashSet<string> NotifyOn)
 {
@@ -271,6 +299,14 @@ internal sealed record AppConfig(
             throw new InvalidOperationException("pollIntervalMinutes must be a positive whole number.");
         }
 
+        var logLevelText = settings.LogLevel?.Trim() ?? "Information";
+        if (!Enum.TryParse<AppLogLevel>(logLevelText, ignoreCase: true, out var logLevel)
+            || !Enum.IsDefined(logLevel)
+            || int.TryParse(logLevelText, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+        {
+            throw new InvalidOperationException("logLevel must be one of: Trace, Debug, Information, Warning, Error, Critical, None.");
+        }
+
         var solverSetting = Environment.GetEnvironmentVariable("FA_USE_FLARESOLVERR") ?? "false";
         var notifyOn = (settings.NotifyOn ?? NotificationTypes)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -287,6 +323,7 @@ internal sealed record AppConfig(
             settings.UserAgent ?? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0",
             settings.NotificationPrefix ?? string.Empty,
             settings.PollIntervalMinutes,
+            logLevel,
             settings.UseFlareSolverr ?? false,
             notifyOn);
     }
@@ -297,7 +334,8 @@ internal sealed record AppConfig(
         string[]? NotifyOn = null,
         string? NotificationPrefix = null,
         string? UserAgent = null,
-        bool? UseFlareSolverr = null);
+        bool? UseFlareSolverr = null,
+        string? LogLevel = "Information");
 }
 
 internal sealed record NotificationItem(

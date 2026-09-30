@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     environment:
       FA_NOTIFY_CONFIG: /app/settings.json
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
     volumes:
       - ./cookies.txt:/app/cookies.txt:ro
       - ./settings.json:/app/settings.json:ro
