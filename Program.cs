@@ -314,7 +314,7 @@ internal static class FaNotifications
             var detailPage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, categoryUrl, cancellationToken);
             var detailDocument = ParseDocument(detailPage);
             var section = detailDocument.DocumentNode.SelectSingleNode($"//*[@id='messages-{type}']") ?? detailDocument.DocumentNode;
-            var rows = section.SelectNodes(".//ul[contains(concat(' ', normalize-space(@class), ' '), ' message-stream ')]/li");
+            var rows = GetRows(section, type);
             var pageItems = rows?.Select(row => ParseItem(row, type, detailPage.Uri))
                 .Where(item => item is not null)
                 .Cast<NotificationItem>()
@@ -388,7 +388,9 @@ internal static class FaNotifications
         }
 
         var actorAnchor = anchors.FirstOrDefault(anchor => IsUserHref(anchor.GetAttributeValue("href", string.Empty)));
-        var primaryAnchor = anchors.FirstOrDefault(anchor => IsPrimaryHref(type, anchor.GetAttributeValue("href", string.Empty)));
+        var primaryAnchors = anchors.Where(anchor => IsPrimaryHref(type, anchor.GetAttributeValue("href", string.Empty))).ToArray();
+        var primaryAnchor = primaryAnchors.FirstOrDefault(anchor => NormalizeText(anchor.InnerText) is not null)
+            ?? primaryAnchors.FirstOrDefault();
         if (primaryAnchor is null && type == "notes")
         {
             primaryAnchor = anchors.FirstOrDefault(anchor => !IsUserHref(anchor.GetAttributeValue("href", string.Empty)));
@@ -410,7 +412,11 @@ internal static class FaNotifications
             : null;
         var images = row.SelectNodes(".//img[@src or @data-src]")?.ToArray() ?? [];
         var icon = images.FirstOrDefault(image => IsAvatarImage(image.GetAttributeValue("src", image.GetAttributeValue("data-src", string.Empty)), actorName));
-        var artwork = images.FirstOrDefault(image => !IsAvatarImage(image.GetAttributeValue("src", image.GetAttributeValue("data-src", string.Empty)), actorName));
+        var artwork = images.FirstOrDefault(image =>
+        {
+            var source = image.GetAttributeValue("src", image.GetAttributeValue("data-src", string.Empty));
+            return !IsAvatarImage(source, actorName) && !source.Contains("/themes/", StringComparison.OrdinalIgnoreCase);
+        });
         var titleNode = row.SelectSingleNode(".//*[contains(concat(' ', normalize-space(@class), ' '), ' journal_subject ')]");
         var title = NormalizeText(titleNode?.InnerText)
             ?? FirstNonEmpty(
@@ -439,6 +445,14 @@ internal static class FaNotifications
             GetImageUrl(artwork, pageUri),
             GetImageUrl(icon, pageUri));
     }
+
+    private static HtmlNodeCollection? GetRows(HtmlNode section, string type) => type switch
+    {
+        "submissions" => section.SelectNodes(".//figure[starts-with(@id, 'sid-') and .//a[contains(@href, '/view/')]]"),
+        "notes" => section.SelectNodes(
+            ".//*[contains(concat(' ', normalize-space(@class), ' '), ' c-noteListItem ')][.//a[contains(concat(' ', normalize-space(@class), ' '), ' notelink ') and contains(concat(' ', normalize-space(@class), ' '), ' note-unread ')]]"),
+        _ => section.SelectNodes(".//ul[contains(concat(' ', normalize-space(@class), ' '), ' message-stream ')]/li")
+    };
 
     private static bool IsPrimaryHref(string type, string href)
     {
