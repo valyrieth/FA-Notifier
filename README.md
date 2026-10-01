@@ -8,11 +8,20 @@ A .NET 10 worker that checks Fur Affinity notifications and posts them to Discor
 
 The notifier uses your authenticated Fur Affinity browser session. It does not need your password, but it does need a Netscape-format `cookies.txt` export.
 
-1. Sign in to Fur Affinity in a browser. A separate browser profile dedicated to the notifier keeps this session isolated from your other browsing.
-2. Use a reputable cookie-export extension from your browser's official extension store. Export cookies for `furaffinity.net` in Netscape `cookies.txt` format.
-3. Save the exported file as `cookies.txt` in the repository root, beside `docker-compose.yml`.
+Sign in to Fur Affinity in a browser first. A separate browser profile dedicated to the notifier keeps this session isolated from your other browsing. Then pick one method.
 
-Treat this file like a password: do not share it, commit it, or include it in support logs. Cookie exporters can access session credentials, so remove the extension when you no longer need it. If the notifier reports a failed check, sign in again and replace the export; session cookies can expire.
+**Script (recommended).** [`scripts/export-cookies.py`](scripts/export-cookies.py) reads the login from your browser and writes a `cookies.txt` that contains only `furaffinity.net` cookies, readable by you alone. Run it on the computer where you are signed in:
+
+```sh
+uv run scripts/export-cookies.py firefox      # or: chrome, edge, brave, chromium, vivaldi, opera, librewolf, safari
+uv run scripts/export-cookies.py              # tries every supported browser
+```
+
+Without `uv`, install the one dependency yourself: `pip install browser-cookie3`, then `python scripts/export-cookies.py firefox`. If the notifier runs on another machine, copy the resulting file there, for example `scp cookies.txt server:path/to/furaffinity-notify/`. Firefox is the most reliable; recent Chrome and Edge builds on Windows encrypt cookies in a way other programs cannot read, in which case use Firefox or the manual method. The script prints when the login cookies expire.
+
+**Manual.** Use a reputable cookie-export extension from your browser's official extension store, export cookies for `furaffinity.net` in Netscape `cookies.txt` format, and save the file as `cookies.txt` in the repository root, beside `docker-compose.yml`. Remove the extension when you no longer need it, since cookie exporters can access session credentials.
+
+Treat `cookies.txt` like a password: do not share it, commit it, or include it in support logs. If the notifier reports a failed check, sign in again and replace the file; session cookies can expire.
 
 ### 2. Create a Discord webhook
 
