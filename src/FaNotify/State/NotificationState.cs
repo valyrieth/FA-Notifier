@@ -2,9 +2,7 @@ namespace FaNotify.State;
 
 internal sealed class NotificationState
 {
-    public Dictionary<string, int> Counts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, DateTimeOffset> SeenItems { get; set; } = new(StringComparer.Ordinal);
-    public bool ItemsInitialized { get; set; }
 
     public void TrimSeenItems()
     {

@@ -14,16 +14,8 @@ internal static class StateFile
         }
 
         var json = File.ReadAllText(path);
-        using var document = JsonDocument.Parse(json);
-        if (document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("counts", out _))
-        {
-            return JsonSerializer.Deserialize<NotificationState>(json, JsonOptions)
-                ?? throw new InvalidDataException("Notification state file contains invalid JSON.");
-        }
-
-        var legacyCounts = JsonSerializer.Deserialize<Dictionary<string, int>>(json, JsonOptions)
+        return JsonSerializer.Deserialize<NotificationState>(json, JsonOptions)
             ?? throw new InvalidDataException("Notification state file contains invalid JSON.");
-        return new NotificationState { Counts = legacyCounts };
     }
 
     public static void Save(string path, NotificationState state)

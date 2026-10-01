@@ -41,15 +41,13 @@ internal sealed class NotifierWorker(
         {
             try
             {
-                logger.CheckStarting(!state.ItemsInitialized);
+                logger.CheckStarting();
                 var snapshot = await FaNotifications.FetchAsync(
                     faClient,
                     solverClient,
                     cookieContainer,
                     config.UseFlareSolverr,
                     logger,
-                    state.Counts,
-                    !state.ItemsInitialized,
                     stoppingToken);
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
@@ -81,8 +79,6 @@ internal sealed class NotifierWorker(
                     logger.NoNewItems();
                 }
 
-                state.Counts = snapshot.Counts;
-                state.ItemsInitialized = true;
                 state.TrimSeenItems();
                 StateFile.Save(config.StateFile, state);
                 logger.StateSaved(state.SeenItems.Count);

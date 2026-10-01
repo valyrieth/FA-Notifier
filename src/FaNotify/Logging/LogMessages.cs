@@ -19,8 +19,8 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Information, Message = "FA Notify started. Normal check interval: {Minutes} minutes.")]
     public static partial void Started(this ILogger logger, int minutes);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Starting Fur Affinity check. Initial item sync: {InitialSync}.")]
-    public static partial void CheckStarting(this ILogger logger, bool initialSync);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Starting Fur Affinity check.")]
+    public static partial void CheckStarting(this ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Snapshot received: registered users={Users:N0}; category counts=[{Counts}]; parsed items={Items}; count fallbacks={Fallbacks}.")]
     public static partial void SnapshotReceived(this ILogger logger, int users, string counts, int items, int fallbacks);
@@ -75,9 +75,6 @@ internal static partial class LogMessages
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Could not send {Alert} alert to Discord: {Message}")]
     public static partial void StatusAlertFailed(this ILogger logger, string alert, string message);
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "No new {Type} count increase: current={Current}, previous={Previous}.")]
-    public static partial void NoCountIncrease(this ILogger logger, string type, int current, int previous);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "No category URL found for {Type}; using a count-only fallback.")]
     public static partial void NoCategoryUrl(this ILogger logger, string type);

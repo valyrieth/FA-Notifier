@@ -33,8 +33,6 @@ internal static partial class FaNotifications
         CookieContainer cookieContainer,
         bool useFlareSolverr,
         ILogger logger,
-        IReadOnlyDictionary<string, int> previousCounts,
-        bool initialSync,
         CancellationToken cancellationToken)
     {
         var homePage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, logger, HomePage, cancellationToken);
@@ -76,12 +74,6 @@ internal static partial class FaNotifications
             var currentCount = notifications[type];
             if (currentCount <= 0)
             {
-                continue;
-            }
-
-            if (!initialSync && currentCount <= previousCounts.GetValueOrDefault(type))
-            {
-                logger.NoCountIncrease(type, currentCount, previousCounts.GetValueOrDefault(type));
                 continue;
             }
 
