@@ -73,8 +73,8 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Warning, Message = "The session cookies expire on {Expiry}.")]
     public static partial void CookiesExpiringSoon(this ILogger logger, string expiry);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Next check in {Minutes} minute(s).")]
-    public static partial void NextCheck(this ILogger logger, int minutes);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Next check in {Minutes:0.#} minute(s).")]
+    public static partial void NextCheck(this ILogger logger, double minutes);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sent {Alert} alert to Discord.")]
     public static partial void StatusAlertSent(this ILogger logger, string alert);

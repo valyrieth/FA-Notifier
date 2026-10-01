@@ -50,7 +50,7 @@ Edit `settings.json`:
 | Setting | Default | Description |
 | --- | --- | --- |
 | `discordWebhookUrl` | Required | Discord channel webhook URL. Keep it private. |
-| `pollIntervalMinutes` | `30` | Normal check interval. Below 15,000 registered users online, checks switch to once per minute until the count reaches 15,000. |
+| `pollIntervalMinutes` | `30` | Normal check interval, plus up to 10% (at most 30 seconds) of random delay so requests are not perfectly periodic. Below 15,000 registered users online, checks switch to once per minute until the count reaches 15,000. |
 | `failureAlertThreshold` | `3` | Number of failed checks in a row before a Discord alert is sent. A login redirect (expired session) alerts immediately. |
 | `logLevel` | `Information` | Minimum log level: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical`, or `None`. |
 | `notifyOn` | All types | Notification types: `submissions`, `watches`, `comments`, `favorites`, `journals`, `notes`. |

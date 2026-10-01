@@ -129,9 +129,10 @@ internal sealed class NotifierWorker(
 
             try
             {
-                var nextIntervalMinutes = fastPolling ? LowTrafficIntervalMinutes : config.IntervalMinutes;
-                logger.NextCheck(nextIntervalMinutes);
-                await Task.Delay(TimeSpan.FromMinutes(nextIntervalMinutes), stoppingToken);
+                var interval = TimeSpan.FromMinutes(fastPolling ? LowTrafficIntervalMinutes : config.IntervalMinutes);
+                var delay = interval + Jitter(interval);
+                logger.NextCheck(delay.TotalMinutes);
+                await Task.Delay(delay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -139,6 +140,9 @@ internal sealed class NotifierWorker(
             }
         }
     }
+
+    private static TimeSpan Jitter(TimeSpan interval) =>
+        TimeSpan.FromSeconds(Random.Shared.NextDouble() * Math.Min(30, interval.TotalSeconds * 0.1));
 
     private void LogPollingStatus(bool statusAlreadyLogged, bool wasFastPolling, bool fastPolling, int registeredUsers)
     {
