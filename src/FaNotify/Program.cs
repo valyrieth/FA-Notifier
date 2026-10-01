@@ -57,7 +57,11 @@ builder.Services.AddHttpClient(HttpClientNames.Discord, client =>
     .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
     .RemoveAllLoggers();
 
-builder.Services.AddHttpClient(HttpClientNames.Solver, client => client.Timeout = TimeSpan.FromSeconds(90))
+builder.Services.AddHttpClient(HttpClientNames.Solver, client =>
+    {
+        client.BaseAddress = config.FlareSolverrUrl;
+        client.Timeout = TimeSpan.FromSeconds(90);
+    })
     .RemoveAllLoggers();
 
 builder.Services.AddHostedService<NotifierWorker>();

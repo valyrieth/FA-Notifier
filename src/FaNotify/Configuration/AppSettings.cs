@@ -8,4 +8,5 @@ internal sealed record AppSettings(
     string? NotificationPrefix = null,
     string? UserAgent = null,
     bool? UseFlareSolverr = null,
+    string? FlareSolverrUrl = null,
     string? LogLevel = "Information");

@@ -9,16 +9,13 @@ namespace FaNotify.Solver;
 
 internal static class FlareSolverr
 {
-    private static readonly Uri ServiceUrl = new("http://flaresolverr:8191/v1");
-
     public static async Task WaitUntilReadyAsync(HttpClient client, ILogger logger, CancellationToken cancellationToken)
     {
-        var serviceRoot = new Uri(ServiceUrl, "/");
         for (var attempt = 0; attempt < 24; attempt++)
         {
             try
             {
-                using var response = await client.GetAsync(serviceRoot, cancellationToken);
+                using var response = await client.GetAsync("/", cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
                     logger.SolverReady();
@@ -49,7 +46,7 @@ internal static class FlareSolverr
 
         var request = new SolverRequest("request.get", target.AbsoluteUri, 60000, true, cookies);
 
-        using var response = await client.PostAsJsonAsync(ServiceUrl, request, AppJsonContext.Default.SolverRequest, cancellationToken);
+        using var response = await client.PostAsJsonAsync(string.Empty, request, AppJsonContext.Default.SolverRequest, cancellationToken);
         response.EnsureSuccessStatusCode();
         using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
         var root = document.RootElement;

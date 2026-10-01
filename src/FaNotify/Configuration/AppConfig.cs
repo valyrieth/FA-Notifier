@@ -17,8 +17,11 @@ internal sealed record AppConfig(
     int FailureAlertThreshold,
     LogLevel LogLevel,
     bool UseFlareSolverr,
+    Uri FlareSolverrUrl,
     HashSet<string> NotifyOn)
 {
+    private const string DefaultFlareSolverrUrl = "http://flaresolverr:8191/v1";
+
     public static AppConfig Load()
     {
         var path = Environment.GetEnvironmentVariable("FA_NOTIFY_CONFIG") ?? "/app/settings.json";
@@ -48,6 +51,12 @@ internal sealed record AppConfig(
             throw new InvalidOperationException("logLevel must be one of: Trace, Debug, Information, Warning, Error, Critical, None.");
         }
 
+        if (!Uri.TryCreate(settings.FlareSolverrUrl ?? DefaultFlareSolverrUrl, UriKind.Absolute, out var solverUri)
+            || (solverUri.Scheme != Uri.UriSchemeHttp && solverUri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException($"flareSolverrUrl must be an http(s) URL such as {DefaultFlareSolverrUrl}.");
+        }
+
         var notifyOn = (settings.NotifyOn ?? NotificationTypes.All)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var invalidTypes = notifyOn.Except(NotificationTypes.All, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -67,6 +76,7 @@ internal sealed record AppConfig(
             settings.FailureAlertThreshold,
             logLevel,
             settings.UseFlareSolverr ?? false,
+            solverUri,
             notifyOn);
     }
 }

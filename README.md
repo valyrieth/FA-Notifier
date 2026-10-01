@@ -57,6 +57,7 @@ Edit `settings.json`:
 | `notificationPrefix` | Empty | Optional text prepended to Discord messages. |
 | `userAgent` | Firefox UA | User-Agent sent to FurAffinity. |
 | `useFlareSolverr` | `false` | Use the optional browser-based FlareSolverr service to fetch FA pages. |
+| `flareSolverrUrl` | `http://flaresolverr:8191/v1` | FlareSolverr API endpoint. Change it if you rename the Compose service or run the solver elsewhere. |
 
 ## Reliability
 
