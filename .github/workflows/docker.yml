@@ -8,8 +8,9 @@ on:
     paths:
       - Dockerfile
       - .dockerignore
-      - Program.cs
-      - FaNotify.csproj
+      - src/**
+      - Directory.Build.props
+      - FaNotify.slnx
       - .github/workflows/docker.yml
 
 permissions:

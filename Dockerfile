@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
-COPY FaNotify.csproj .
+COPY Directory.Build.props FaNotify.slnx ./
+COPY src/FaNotify/FaNotify.csproj src/FaNotify/
 RUN dotnet restore
-COPY Program.cs .
-RUN dotnet publish -c Release --no-restore -p:UseAppHost=false -o /out
+COPY src/ src/
+RUN dotnet publish src/FaNotify -c Release --no-restore -p:UseAppHost=false -o /out
 
 FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine
 WORKDIR /app
