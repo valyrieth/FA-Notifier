@@ -14,11 +14,11 @@ var startupLogger = loggerProvider.CreateLogger("Startup");
 startupLogger.WritingLogFile(logPath);
 
 AppConfig config;
-LoadedCookies cookies;
+CookieSession cookies;
 try
 {
     config = AppConfig.Load();
-    cookies = CookieFile.Load(config.CookieFile);
+    cookies = CookieFile.Load(config.CookieFile, config.RefreshedCookieFile);
 }
 catch (Exception exception)
 {

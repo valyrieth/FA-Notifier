@@ -73,6 +73,12 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Warning, Message = "The session cookies expire on {Expiry}.")]
     public static partial void CookiesExpiringSoon(this ILogger logger, string expiry);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Fur Affinity renewed the session cookies; the new values are saved to {Path}.")]
+    public static partial void CookiesRefreshed(this ILogger logger, string path);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not save the renewed session cookies: {Message}")]
+    public static partial void CookieSaveFailed(this ILogger logger, string message);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not write the health file: {Message}")]
     public static partial void HealthFileFailed(this ILogger logger, string message);
 

@@ -14,7 +14,7 @@ namespace FaNotify.Hosting;
 
 internal sealed class NotifierWorker(
     AppConfig config,
-    LoadedCookies cookies,
+    CookieSession cookies,
     IHttpClientFactory httpClientFactory,
     ILogger<NotifierWorker> logger) : BackgroundService
 {
@@ -100,6 +100,7 @@ internal sealed class NotifierWorker(
                 }
 
                 await WarnIfCookiesExpiringAsync(discordClient, stoppingToken);
+                SaveRefreshedCookies();
                 WriteHealthFile();
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -223,6 +224,21 @@ internal sealed class NotifierWorker(
         return newItems;
     }
 
+    private void SaveRefreshedCookies()
+    {
+        try
+        {
+            if (cookies.SaveIfChanged())
+            {
+                logger.CookiesRefreshed(config.RefreshedCookieFile);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            logger.CookieSaveFailed(exception.Message);
+        }
+    }
+
     // The Docker HEALTHCHECK compares this timestamp with the clock, so it needs no knowledge of the poll interval.
     private void WriteHealthFile()
     {
@@ -239,7 +255,7 @@ internal sealed class NotifierWorker(
 
     private async Task WarnIfCookiesExpiringAsync(HttpClient discordClient, CancellationToken cancellationToken)
     {
-        if (cookies.SessionExpiry is not { } expiry)
+        if (cookies.GetSessionExpiry() is not { } expiry)
         {
             return;
         }

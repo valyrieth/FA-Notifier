@@ -8,6 +8,7 @@ namespace FaNotify.Configuration;
 
 internal sealed record AppConfig(
     string CookieFile,
+    string RefreshedCookieFile,
     string StateFile,
     string HealthFile,
     string WebhookUrl,
@@ -75,6 +76,7 @@ internal sealed record AppConfig(
 
         return new AppConfig(
             "/app/cookies.txt",
+            "/data/cookies-refreshed.txt",
             "/data/notifications.json",
             "/data/healthy-until",
             webhookUri.ToString(),
