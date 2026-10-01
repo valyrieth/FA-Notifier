@@ -4,7 +4,7 @@ WORKDIR /src
 COPY FaNotify.csproj .
 RUN dotnet restore
 COPY Program.cs .
-RUN dotnet publish -c Release --no-restore -o /out
+RUN dotnet publish -c Release --no-restore -p:UseAppHost=false -o /out
 
 FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine
 WORKDIR /app

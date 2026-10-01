@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
@@ -24,7 +27,7 @@ catch (Exception exception)
 }
 
 var cookieContainer = CookieFile.Load(config.CookieFile);
-using var handler = new HttpClientHandler { CookieContainer = cookieContainer };
+using var handler = new SocketsHttpHandler { CookieContainer = cookieContainer, PooledConnectionLifetime = TimeSpan.FromMinutes(5) };
 using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
 using var solverClient = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
 httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(config.UserAgent);
@@ -39,6 +42,11 @@ Console.CancelKeyPress += (_, eventArgs) =>
     eventArgs.Cancel = true;
     cancellation.Cancel();
 };
+using var sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+{
+    context.Cancel = true;
+    cancellation.Cancel();
+});
 
 if (config.UseFlareSolverr)
 {
@@ -80,7 +88,7 @@ while (!cancellation.IsCancellationRequested)
             logger.Info(status);
         }
 
-        var newItems = new List<NotificationItem>();
+        List<NotificationItem> newItems = [];
         foreach (var item in snapshot.Items)
         {
             if (!config.NotifyOn.Contains(item.Type))
@@ -213,7 +221,7 @@ while (!cancellation.IsCancellationRequested)
 
 internal sealed class AppLogger : IDisposable
 {
-    private readonly object gate = new();
+    private readonly Lock gate = new();
     private readonly StreamWriter file;
     private AppLogLevel minimumLevel = AppLogLevel.Information;
 
@@ -281,12 +289,12 @@ internal sealed record AppConfig(
     bool UseFlareSolverr,
     HashSet<string> NotifyOn)
 {
-    private static readonly string[] NotificationTypes = ["submissions", "watches", "comments", "favorites", "journals", "notes"];
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public static AppConfig Load()
     {
         var path = Environment.GetEnvironmentVariable("FA_NOTIFY_CONFIG") ?? "/app/settings.json";
-        var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+        var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), JsonOptions)
             ?? throw new InvalidDataException("Settings file contains invalid JSON.");
 
         if (!Uri.TryCreate(settings.DiscordWebhookUrl, UriKind.Absolute, out var webhookUri) || webhookUri.Scheme != Uri.UriSchemeHttps)
@@ -308,9 +316,9 @@ internal sealed record AppConfig(
         }
 
         var solverSetting = Environment.GetEnvironmentVariable("FA_USE_FLARESOLVERR") ?? "false";
-        var notifyOn = (settings.NotifyOn ?? NotificationTypes)
+        var notifyOn = (settings.NotifyOn ?? FaNotifications.NotificationTypes)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var invalidTypes = notifyOn.Except(NotificationTypes, StringComparer.OrdinalIgnoreCase).ToArray();
+        var invalidTypes = notifyOn.Except(FaNotifications.NotificationTypes, StringComparer.OrdinalIgnoreCase).ToArray();
         if (invalidTypes.Length > 0)
         {
             throw new InvalidOperationException($"Unknown notification type(s): {string.Join(", ", invalidTypes)}.");
@@ -432,10 +440,22 @@ internal static class CookieFile
     }
 }
 
-internal static class FaNotifications
+internal static partial class FaNotifications
 {
-    private static readonly string[] NotificationTypes = ["submissions", "watches", "comments", "favorites", "journals", "notes"];
+    internal static readonly string[] NotificationTypes = ["submissions", "watches", "comments", "favorites", "journals", "notes"];
     private static readonly Uri HomePage = new("https://www.furaffinity.net/");
+
+    [GeneratedRegex(@"\d[\d,]*")]
+    private static partial Regex CountPattern();
+
+    [GeneratedRegex(@"(?<count>\d[\d,]*)\s+registered\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RegisteredUsersPattern();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespacePattern();
+
+    [GeneratedRegex("""<input[^>]+type=["']password["']""", RegexOptions.IgnoreCase)]
+    private static partial Regex PasswordInputPattern();
 
     public static async Task<NotificationSnapshot> FetchAsync(
         HttpClient client,
@@ -467,7 +487,7 @@ internal static class FaNotifications
                     continue;
                 }
 
-                var match = Regex.Match(link.InnerText, @"\d[\d,]*");
+                var match = CountPattern().Match(link.InnerText);
                 if (match.Success && int.TryParse(match.Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var count))
                 {
                     notifications[type] = count;
@@ -507,8 +527,7 @@ internal static class FaNotifications
             var section = detailDocument.DocumentNode.SelectSingleNode($"//*[@id='messages-{type}']") ?? detailDocument.DocumentNode;
             var rows = GetRows(section, type);
             var pageItems = rows?.Select(row => ParseItem(row, type, detailPage.Uri))
-                .Where(item => item is not null)
-                .Cast<NotificationItem>()
+                .OfType<NotificationItem>()
                 .ToArray() ?? [];
 
             if (pageItems.Length == 0)
@@ -528,7 +547,7 @@ internal static class FaNotifications
 
     private static int ParseRegisteredUserCount(HtmlDocument document)
     {
-        var match = Regex.Match(document.DocumentNode.InnerText, @"(?<count>\d[\d,]*)\s+registered\b", RegexOptions.IgnoreCase);
+        var match = RegisteredUsersPattern().Match(document.DocumentNode.InnerText);
         if (!match.Success || !int.TryParse(match.Groups["count"].Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var count))
         {
             throw new InvalidDataException("Could not read Fur Affinity's registered-user count; notification state was not updated.");
@@ -564,7 +583,7 @@ internal static class FaNotifications
 
     private static HtmlDocument ParseDocument((HttpStatusCode StatusCode, string Html, Uri Uri) page)
     {
-        if (IsLoginPage(page.Html) || page.Uri?.AbsolutePath.StartsWith("/login", StringComparison.OrdinalIgnoreCase) == true)
+        if (IsLoginPage(page.Html) || page.Uri.AbsolutePath.StartsWith("/login", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("FurAffinity redirected to login. Refresh cookies.txt and restart the container.");
         }
@@ -577,12 +596,12 @@ internal static class FaNotifications
             var reason = challengedByCloudflare
                 ? "FurAffinity's Cloudflare security check blocked the request. Check the User-Agent and network/IP; cookies alone cannot pass this challenge."
                 : "FurAffinity denied the request. The session may be invalid, or the request may be blocked by FA's security rules.";
-            throw new HttpRequestException($"FurAffinity returned HTTP 403 at {page.Uri?.Host}{page.Uri?.AbsolutePath}. {reason}");
+            throw new HttpRequestException($"FurAffinity returned HTTP 403 at {page.Uri.Host}{page.Uri.AbsolutePath}. {reason}");
         }
 
         if ((int)page.StatusCode is < 200 or >= 300)
         {
-            throw new HttpRequestException($"FurAffinity returned HTTP {(int)page.StatusCode} at {page.Uri?.Host}{page.Uri?.AbsolutePath}.");
+            throw new HttpRequestException($"FurAffinity returned HTTP {(int)page.StatusCode} at {page.Uri.Host}{page.Uri.AbsolutePath}.");
         }
 
         var document = new HtmlDocument();
@@ -644,7 +663,7 @@ internal static class FaNotifications
         }
 
         var identity = $"{type}\n{itemUri.AbsoluteUri}\n{actorName}\n{description}";
-        var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity)));
+        var id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
         return new NotificationItem(
             id,
             type,
@@ -737,7 +756,7 @@ internal static class FaNotifications
             return null;
         }
 
-        return Regex.Replace(HtmlEntity.DeEntitize(text), @"\s+", " ").Trim();
+        return WhitespacePattern().Replace(HtmlEntity.DeEntitize(text), " ").Trim();
     }
 
     private static string FirstNonEmpty(params string?[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "FurAffinity notification";
@@ -747,7 +766,7 @@ internal static class FaNotifications
     private static bool IsLoginPage(string html)
     {
         return html.Contains("<form", StringComparison.OrdinalIgnoreCase)
-            && Regex.IsMatch(html, "<input[^>]+type=[\\\"']password[\\\"']", RegexOptions.IgnoreCase);
+            && PasswordInputPattern().IsMatch(html);
     }
 }
 
@@ -841,7 +860,7 @@ internal static class DiscordWebhook
         IReadOnlyList<NotificationItem> notifications,
         CancellationToken cancellationToken)
     {
-        foreach (var (batch, index) in notifications.Chunk(10).Select((items, index) => (items, index)))
+        foreach (var (index, batch) in notifications.Chunk(10).Index())
         {
             logger.Debug($"Sending Discord batch {index + 1} with {batch.Length} notification(s).");
             var embeds = batch.Select(notification =>
