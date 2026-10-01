@@ -17,7 +17,15 @@ uv run scripts/export-cookies.py firefox      # or: chrome, edge, brave, chromiu
 uv run scripts/export-cookies.py              # tries every supported browser
 ```
 
-Without `uv`, install the one dependency yourself: `pip install browser-cookie3`, then `python scripts/export-cookies.py firefox`. If the notifier runs on another machine, copy the resulting file there, for example `scp cookies.txt server:path/to/furaffinity-notify/`. Firefox is the most reliable; recent Chrome and Edge builds on Windows encrypt cookies in a way other programs cannot read, in which case use Firefox or the manual method. The script prints when the login cookies expire.
+Without `uv`, install the one dependency (`browser-cookie3`, listed in [`scripts/requirements.txt`](scripts/requirements.txt)) into a virtual environment, since many systems refuse system-wide `pip install`:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r scripts/requirements.txt
+.venv/bin/python scripts/export-cookies.py firefox      # Windows: .venv\Scripts\pip and .venv\Scripts\python
+```
+
+`pipx run scripts/export-cookies.py` also works. If the notifier runs on another machine, copy the resulting file there, for example `scp cookies.txt server:path/to/furaffinity-notify/`. Firefox is the most reliable; recent Chrome and Edge builds on Windows encrypt cookies in a way other programs cannot read, in which case use Firefox or the manual method. The script prints when the login cookies expire.
 
 **Manual.** Use a reputable cookie-export extension from your browser's official extension store, export cookies for `furaffinity.net` in Netscape `cookies.txt` format, and save the file as `cookies.txt` in the repository root, beside `docker-compose.yml`. Remove the extension when you no longer need it, since cookie exporters can access session credentials.
 

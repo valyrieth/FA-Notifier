@@ -10,14 +10,24 @@ resulting file next to docker-compose.yml. Only furaffinity.net cookies are writ
 
     uv run scripts/export-cookies.py firefox
     pipx run scripts/export-cookies.py          # tries every supported browser
-    pip install browser-cookie3 && python scripts/export-cookies.py chrome
+    pip install -r scripts/requirements.txt && python scripts/export-cookies.py chrome
 """
 import argparse
 import datetime
 import os
 import sys
 
-import browser_cookie3
+try:
+    import browser_cookie3
+except ImportError:
+    sys.exit(
+        "This script needs the browser-cookie3 package. Either run it with uv (installs it for you):\n"
+        "  uv run scripts/export-cookies.py\n"
+        "or install it in a virtual environment first:\n"
+        "  python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt\n"
+        "  .venv/bin/python scripts/export-cookies.py\n"
+        "(on Windows use .venv\\Scripts\\pip and .venv\\Scripts\\python)"
+    )
 
 DOMAIN = "furaffinity.net"
 SESSION_COOKIES = {"a", "b"}
