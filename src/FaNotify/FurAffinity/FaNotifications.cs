@@ -28,6 +28,12 @@ internal static partial class FaNotifications
     [GeneratedRegex("""<input[^>]+type=["']password["']""", RegexOptions.IgnoreCase)]
     private static partial Regex PasswordInputPattern();
 
+    [GeneratedRegex(@"/view/(?<id>\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex ViewIdPattern();
+
+    [GeneratedRegex(@"/journal/(?<id>\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex JournalIdPattern();
+
     public static async Task<NotificationSnapshot> FetchAsync(
         HttpClient client,
         HttpClient solverClient,
@@ -225,8 +231,7 @@ internal static partial class FaNotifications
             description = $"{actorName} is now watching you.";
         }
 
-        var identity = $"{type}\n{itemUri.AbsoluteUri}\n{actorName}\n{description}";
-        var id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+        var id = CreateId(type, itemUri, actorName, description);
         return new NotificationItem(
             id,
             type,
@@ -237,6 +242,32 @@ internal static partial class FaNotifications
             actorUrl,
             GetImageUrl(artwork, pageUri),
             GetImageUrl(icon, pageUri));
+    }
+
+    private static string CreateId(string type, Uri itemUri, string? actorName, string description)
+    {
+        var stableId = type switch
+        {
+            "submissions" when MatchId(ViewIdPattern(), itemUri) is { } viewId => $"submissions:{viewId}",
+            "journals" when MatchId(JournalIdPattern(), itemUri) is { } journalId => $"journals:{journalId}",
+            "favorites" when MatchId(ViewIdPattern(), itemUri) is { } favoritedViewId && !string.IsNullOrWhiteSpace(actorName)
+                => $"favorites:{favoritedViewId}:{actorName.ToLowerInvariant()}",
+            _ => null
+        };
+
+        if (stableId is not null)
+        {
+            return stableId;
+        }
+
+        var identity = $"{type}\n{itemUri.AbsoluteUri}\n{actorName}\n{description}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+    }
+
+    private static string? MatchId(Regex pattern, Uri uri)
+    {
+        var match = pattern.Match(uri.AbsolutePath);
+        return match.Success ? match.Groups["id"].Value : null;
     }
 
     private static HtmlNodeCollection? GetRows(HtmlNode section, string type) => type switch
