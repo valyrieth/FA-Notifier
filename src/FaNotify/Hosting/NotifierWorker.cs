@@ -20,11 +20,12 @@ internal sealed class NotifierWorker(
 {
     private const int RegisteredUserThreshold = 15000;
     private const int LowTrafficIntervalMinutes = 1;
-    private static readonly TimeSpan CookieExpiryWarning = TimeSpan.FromDays(7);
-    private static readonly TimeSpan CookieWarningRepeat = TimeSpan.FromDays(1);
+    private static readonly TimeSpan CookieExpiryWarning = TimeSpan.FromHours(24);
     private static readonly TimeSpan HealthGracePeriod = TimeSpan.FromMinutes(5);
 
-    private DateTimeOffset? lastCookieWarning;
+    private bool expiryLogged;
+    private DateTimeOffset? loggedExpiry;
+    private DateTimeOffset? alertedExpiry;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -43,6 +44,7 @@ internal sealed class NotifierWorker(
         }
 
         logger.Started(config.IntervalMinutes);
+        await CheckCookieExpiryAsync(discordClient, stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -99,8 +101,8 @@ internal sealed class NotifierWorker(
                     failureAlertSent = false;
                 }
 
-                await WarnIfCookiesExpiringAsync(discordClient, stoppingToken);
                 SaveRefreshedCookies();
+                await CheckCookieExpiryAsync(discordClient, stoppingToken);
                 WriteHealthFile();
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -253,31 +255,57 @@ internal sealed class NotifierWorker(
         }
     }
 
-    private async Task WarnIfCookiesExpiringAsync(HttpClient discordClient, CancellationToken cancellationToken)
+    private async Task CheckCookieExpiryAsync(HttpClient discordClient, CancellationToken cancellationToken)
     {
-        if (cookies.GetSessionExpiry() is not { } expiry)
+        var expiry = cookies.GetSessionExpiry();
+        if (!expiryLogged || expiry != loggedExpiry)
+        {
+            expiryLogged = true;
+            loggedExpiry = expiry;
+            if (expiry is { } known)
+            {
+                logger.CookiesExpire(FormatExpiry(known), (known - DateTimeOffset.UtcNow).TotalDays);
+            }
+            else
+            {
+                logger.CookiesDoNotExpire();
+            }
+        }
+
+        if (expiry is not { } expiresAt)
         {
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        if (expiry - now > CookieExpiryWarning || (lastCookieWarning is { } last && now - last < CookieWarningRepeat))
+        var remaining = expiresAt - DateTimeOffset.UtcNow;
+        if (remaining > CookieExpiryWarning)
         {
             return;
         }
 
-        var expiryDate = expiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        logger.CookiesExpiringSoon(expiryDate);
+        var expiryText = FormatExpiry(expiresAt);
+        var hours = Math.Max(0, remaining.TotalHours);
+        logger.CookiesExpiringSoon(expiryText, hours);
+        if (alertedExpiry == expiresAt)
+        {
+            return;
+        }
+
         if (await TrySendStatusAlertAsync(
             discordClient,
             "cookies-expiring",
             "FurAffinity session cookies expire soon",
-            $"The Fur Affinity session cookies in cookies.txt expire on {expiryDate}. Export fresh cookies, replace cookies.txt, and restart the container before then.",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"The Fur Affinity session cookies expire on {expiryText}, in about {hours:0} hours. Run scripts/export-cookies.py (or export cookies.txt again), replace the file, and restart the container before then."),
             cancellationToken))
         {
-            lastCookieWarning = now;
+            alertedExpiry = expiresAt;
         }
     }
+
+    private static string FormatExpiry(DateTimeOffset expiry) =>
+        expiry.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture);
 
     private void RecordDelivered(NotificationState state, IReadOnlyList<NotificationItem> delivered)
     {

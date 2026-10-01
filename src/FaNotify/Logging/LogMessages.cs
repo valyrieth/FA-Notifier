@@ -70,8 +70,14 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Debug, Message = "Check has failed {Count} time(s) in a row; alerting after {Threshold}.")]
     public static partial void FailureBelowThreshold(this ILogger logger, int count, int threshold);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The session cookies expire on {Expiry}.")]
-    public static partial void CookiesExpiringSoon(this ILogger logger, string expiry);
+    [LoggerMessage(Level = LogLevel.Information, Message = "The session cookies expire on {Expiry} (in {Days:0.#} days).")]
+    public static partial void CookiesExpire(this ILogger logger, string expiry, double days);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The session cookies have no expiry date.")]
+    public static partial void CookiesDoNotExpire(this ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The session cookies expire in {Hours:0.#} hours (on {Expiry}). Replace cookies.txt before then.")]
+    public static partial void CookiesExpiringSoon(this ILogger logger, string expiry, double hours);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Fur Affinity renewed the session cookies; the new values are saved to {Path}.")]
     public static partial void CookiesRefreshed(this ILogger logger, string path);

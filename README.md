@@ -96,7 +96,7 @@ At startup, the notifier logs the current Fur Affinity registered-user count. If
 
 If checks keep failing, the notifier sends one Discord alert after `failureAlertThreshold` consecutive failures, so a single timeout or temporary 5xx does not page you. If Fur Affinity redirects to login (expired session cookies), the alert is sent immediately. It avoids repeating the alert for every failed poll and sends a recovery alert after the next successful check. Detailed failure information remains in the application log.
 
-When the Fur Affinity session cookies (`a` and `b`) in `cookies.txt` are within seven days of expiring, the notifier logs a warning and sends a Discord alert, then repeats it at most once a day. Replace `cookies.txt` and restart the container to pick up new cookies.
+The notifier logs when the Fur Affinity login cookies (`a` and `b`) expire: once at startup and again whenever the date changes. Within 24 hours of expiry it logs a warning on every check and sends one Discord alert. Replace `cookies.txt` and restart the container to pick up new cookies.
 
 If Fur Affinity renews the session cookies in a response, the notifier stores the new values in `./fa-notifier/data/cookies-refreshed.txt` and uses that file on later starts, so the session can outlast the original export. Replacing `cookies.txt` with a new export discards the renewed copy automatically. Renewal is only tracked for normal requests, not requests made through FlareSolverr.
 
