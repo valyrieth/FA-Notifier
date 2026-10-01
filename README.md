@@ -51,6 +51,7 @@ Edit `settings.json`:
 | --- | --- | --- |
 | `discordWebhookUrl` | Required | Discord channel webhook URL. Keep it private. |
 | `pollIntervalMinutes` | `30` | Normal check interval. Below 15,000 registered users online, checks switch to once per minute until the count reaches 15,000. |
+| `failureAlertThreshold` | `3` | Number of failed checks in a row before a Discord alert is sent. A login redirect (expired session) alerts immediately. |
 | `logLevel` | `Information` | Minimum log level: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical`, or `None`. |
 | `notifyOn` | All types | Notification types: `submissions`, `watches`, `comments`, `favorites`, `journals`, `notes`. |
 | `notificationPrefix` | Empty | Optional text prepended to Discord messages. |
@@ -79,7 +80,9 @@ New items are sent as individual Discord embeds with their category, title, link
 
 At startup, the notifier logs the current Fur Affinity registered-user count. If it is below 15,000, it logs that checks are switching to once per minute. When the count reaches 15,000, it logs that normal polling has resumed. These status messages are written to the log file and container output, not sent to Discord.
 
-If a check fails, the notifier sends one Discord alert noting that the session cookies may have expired. It avoids repeating the alert for every failed poll and sends a recovery alert after the next successful check. Detailed failure information remains in the application log.
+If checks keep failing, the notifier sends one Discord alert after `failureAlertThreshold` consecutive failures, so a single timeout or temporary 5xx does not page you. If Fur Affinity redirects to login (expired session cookies), the alert is sent immediately. It avoids repeating the alert for every failed poll and sends a recovery alert after the next successful check. Detailed failure information remains in the application log.
+
+When the Fur Affinity session cookies (`a` and `b`) in `cookies.txt` are within seven days of expiring, the notifier logs a warning and sends a Discord alert, then repeats it at most once a day. Replace `cookies.txt` and restart the container to pick up new cookies.
 
 Every check loads the detail page of each category that has unread items, so a new item is found even when the unread count does not change (for example, one item is read while another arrives). Items already delivered are skipped using IDs stored in `./fa-notifier/data/notifications.json`. Submissions and journals are identified by their Fur Affinity view or journal ID, and favorites by view ID plus the user who favorited it, so edits to a title or description do not cause a repeat. Other types (watches, comments, notes) use a hash of their link, user, and text. The first check sends all current unread items. Here, “seen” means successfully sent by this notifier; it is not a Discord read receipt or a mark-as-read action on Fur Affinity. If a category's row markup is not recognized, the notifier falls back to a count-only alert. Failed checks do not change the saved state, and a failed Discord send keeps only the batches Discord accepted.
 

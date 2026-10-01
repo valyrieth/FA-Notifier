@@ -1,4 +1,4 @@
-using System.Net;
+using System.Globalization;
 using FaNotify.Configuration;
 using FaNotify.Discord;
 using FaNotify.FurAffinity;
@@ -14,12 +14,16 @@ namespace FaNotify.Hosting;
 
 internal sealed class NotifierWorker(
     AppConfig config,
-    CookieContainer cookieContainer,
+    LoadedCookies cookies,
     IHttpClientFactory httpClientFactory,
     ILogger<NotifierWorker> logger) : BackgroundService
 {
     private const int RegisteredUserThreshold = 15000;
     private const int LowTrafficIntervalMinutes = 1;
+    private static readonly TimeSpan CookieExpiryWarning = TimeSpan.FromDays(7);
+    private static readonly TimeSpan CookieWarningRepeat = TimeSpan.FromDays(1);
+
+    private DateTimeOffset? lastCookieWarning;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -30,6 +34,7 @@ internal sealed class NotifierWorker(
         var fastPolling = false;
         var startupStatusLogged = false;
         var failureAlertSent = false;
+        var consecutiveFailures = 0;
 
         if (config.UseFlareSolverr)
         {
@@ -45,7 +50,7 @@ internal sealed class NotifierWorker(
                 var snapshot = await FaNotifications.FetchAsync(
                     faClient,
                     solverClient,
-                    cookieContainer,
+                    cookies.Container,
                     config.UseFlareSolverr,
                     logger,
                     stoppingToken);
@@ -81,6 +86,7 @@ internal sealed class NotifierWorker(
                     logger.NoNewItems();
                 }
 
+                consecutiveFailures = 0;
                 if (failureAlertSent
                     && await TrySendStatusAlertAsync(
                         discordClient,
@@ -91,6 +97,8 @@ internal sealed class NotifierWorker(
                 {
                     failureAlertSent = false;
                 }
+
+                await WarnIfCookiesExpiringAsync(discordClient, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -99,7 +107,12 @@ internal sealed class NotifierWorker(
             catch (Exception exception)
             {
                 logger.CheckFailed(exception.Message);
-                if (!failureAlertSent)
+                consecutiveFailures++;
+                if (failureAlertSent)
+                {
+                    logger.FailureAlertAlreadySent();
+                }
+                else if (exception is SessionExpiredException || consecutiveFailures >= config.FailureAlertThreshold)
                 {
                     failureAlertSent = await TrySendStatusAlertAsync(
                         discordClient,
@@ -110,7 +123,7 @@ internal sealed class NotifierWorker(
                 }
                 else
                 {
-                    logger.FailureAlertAlreadySent();
+                    logger.FailureBelowThreshold(consecutiveFailures, config.FailureAlertThreshold);
                 }
             }
 
@@ -202,6 +215,32 @@ internal sealed class NotifierWorker(
         }
 
         return newItems;
+    }
+
+    private async Task WarnIfCookiesExpiringAsync(HttpClient discordClient, CancellationToken cancellationToken)
+    {
+        if (cookies.SessionExpiry is not { } expiry)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (expiry - now > CookieExpiryWarning || (lastCookieWarning is { } last && now - last < CookieWarningRepeat))
+        {
+            return;
+        }
+
+        var expiryDate = expiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        logger.CookiesExpiringSoon(expiryDate);
+        if (await TrySendStatusAlertAsync(
+            discordClient,
+            "cookies-expiring",
+            "FurAffinity session cookies expire soon",
+            $"The Fur Affinity session cookies in cookies.txt expire on {expiryDate}. Export fresh cookies, replace cookies.txt, and restart the container before then.",
+            cancellationToken))
+        {
+            lastCookieWarning = now;
+        }
     }
 
     private void RecordDelivered(NotificationState state, IReadOnlyList<NotificationItem> delivered)

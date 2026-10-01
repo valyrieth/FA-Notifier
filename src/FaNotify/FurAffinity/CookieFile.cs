@@ -5,7 +5,7 @@ namespace FaNotify.FurAffinity;
 
 internal static class CookieFile
 {
-    public static CookieContainer Load(string path)
+    public static LoadedCookies Load(string path)
     {
         if (!File.Exists(path))
         {
@@ -14,6 +14,8 @@ internal static class CookieFile
 
         var container = new CookieContainer();
         var loaded = 0;
+        DateTimeOffset? sessionExpiry = null;
+        DateTimeOffset? earliestExpiry = null;
         foreach (var originalLine in File.ReadLines(path))
         {
             var line = originalLine.TrimEnd('\r', '\n');
@@ -41,10 +43,17 @@ internal static class CookieFile
 
             if (long.TryParse(fields[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var expiry) && expiry > 0)
             {
-                cookie.Expires = DateTimeOffset.FromUnixTimeSeconds(expiry).UtcDateTime;
+                var expiresAt = DateTimeOffset.FromUnixTimeSeconds(expiry);
+                cookie.Expires = expiresAt.UtcDateTime;
                 if (cookie.Expired)
                 {
                     continue;
+                }
+
+                earliestExpiry = earliestExpiry is { } earliest && earliest < expiresAt ? earliest : expiresAt;
+                if (cookie.Name is "a" or "b")
+                {
+                    sessionExpiry = sessionExpiry is { } session && session < expiresAt ? session : expiresAt;
                 }
             }
 
@@ -57,6 +66,6 @@ internal static class CookieFile
             throw new InvalidDataException("No unexpired cookies were found in the Netscape cookie file.");
         }
 
-        return container;
+        return new LoadedCookies(container, sessionExpiry ?? earliestExpiry);
     }
 }

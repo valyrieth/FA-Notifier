@@ -67,6 +67,12 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Debug, Message = "Check is still failing; the failure alert was already sent for this outage.")]
     public static partial void FailureAlertAlreadySent(this ILogger logger);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Check has failed {Count} time(s) in a row; alerting after {Threshold}.")]
+    public static partial void FailureBelowThreshold(this ILogger logger, int count, int threshold);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The session cookies expire on {Expiry}.")]
+    public static partial void CookiesExpiringSoon(this ILogger logger, string expiry);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Next check in {Minutes} minute(s).")]
     public static partial void NextCheck(this ILogger logger, int minutes);
 

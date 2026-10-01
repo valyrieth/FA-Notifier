@@ -12,6 +12,7 @@ internal sealed record AppConfig(
     string UserAgent,
     string NotificationPrefix,
     int IntervalMinutes,
+    int FailureAlertThreshold,
     LogLevel LogLevel,
     bool UseFlareSolverr,
     HashSet<string> NotifyOn)
@@ -32,6 +33,11 @@ internal sealed record AppConfig(
         if (settings.PollIntervalMinutes < 1)
         {
             throw new InvalidOperationException("pollIntervalMinutes must be a positive whole number.");
+        }
+
+        if (settings.FailureAlertThreshold < 1)
+        {
+            throw new InvalidOperationException("failureAlertThreshold must be a positive whole number.");
         }
 
         var logLevelText = settings.LogLevel?.Trim() ?? "Information";
@@ -58,6 +64,7 @@ internal sealed record AppConfig(
             settings.UserAgent ?? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0",
             settings.NotificationPrefix ?? string.Empty,
             settings.PollIntervalMinutes,
+            settings.FailureAlertThreshold,
             logLevel,
             settings.UseFlareSolverr ?? false,
             notifyOn);
@@ -66,6 +73,7 @@ internal sealed record AppConfig(
     private sealed record Settings(
         string? DiscordWebhookUrl,
         int PollIntervalMinutes = 30,
+        int FailureAlertThreshold = 3,
         string[]? NotifyOn = null,
         string? NotificationPrefix = null,
         string? UserAgent = null,

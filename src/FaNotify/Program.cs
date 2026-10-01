@@ -24,7 +24,7 @@ catch (Exception exception)
     throw;
 }
 
-var cookieContainer = CookieFile.Load(config.CookieFile);
+var cookies = CookieFile.Load(config.CookieFile);
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
@@ -32,7 +32,7 @@ builder.Logging.AddProvider(loggerProvider);
 builder.Logging.SetMinimumLevel(config.LogLevel);
 builder.Services.Configure<ConsoleLifetimeOptions>(options => options.SuppressStatusMessages = true);
 builder.Services.AddSingleton(config);
-builder.Services.AddSingleton(cookieContainer);
+builder.Services.AddSingleton(cookies);
 
 // The default HTTP logging handlers would log full request URLs, including the Discord webhook token.
 builder.Services.AddHttpClient(HttpClientNames.Fa, client =>
@@ -42,7 +42,7 @@ builder.Services.AddHttpClient(HttpClientNames.Fa, client =>
     })
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
-        CookieContainer = cookieContainer,
+        CookieContainer = cookies.Container,
         PooledConnectionLifetime = TimeSpan.FromMinutes(5)
     })
     .SetHandlerLifetime(Timeout.InfiniteTimeSpan)

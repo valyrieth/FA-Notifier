@@ -1,6 +1,7 @@
 {
   "discordWebhookUrl": "https://discord.com/api/webhooks/your-webhook-id/your-webhook-token",
   "pollIntervalMinutes": 30,
+  "failureAlertThreshold": 3,
   "logLevel": "Information",
   "notifyOn": [
     "submissions",

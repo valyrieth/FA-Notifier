@@ -154,7 +154,7 @@ internal static partial class FaNotifications
     {
         if (IsLoginPage(page.Html) || page.Uri.AbsolutePath.StartsWith("/login", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("FurAffinity redirected to login. Refresh cookies.txt and restart the container.");
+            throw new SessionExpiredException("FurAffinity redirected to login. Refresh cookies.txt and restart the container.");
         }
 
         if (page.StatusCode == HttpStatusCode.Forbidden)
