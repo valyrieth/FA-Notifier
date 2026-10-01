@@ -14,5 +14,5 @@
   "notificationPrefix": "",
   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0",
   "useFlareSolverr": false,
-  "flareSolverrUrl": "http://flaresolverr:8191/v1"
+  "flareSolverrUrl": "http://fa-solver:8191/v1"
 }
