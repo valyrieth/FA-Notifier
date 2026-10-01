@@ -45,7 +45,7 @@ The Compose bind mounts keep state in `./fa-notifier/data/notifications.json` an
 
 ## Settings
 
-Edit `settings.json`:
+Edit `settings.json`; `//` comments and trailing commas are allowed:
 
 | Setting | Default | Description |
 | --- | --- | --- |

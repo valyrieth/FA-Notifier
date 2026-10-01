@@ -25,8 +25,16 @@ internal sealed record AppConfig(
     public static AppConfig Load()
     {
         var path = Environment.GetEnvironmentVariable("FA_NOTIFY_CONFIG") ?? "/app/settings.json";
-        var settings = JsonSerializer.Deserialize(File.ReadAllText(path), AppJsonContext.Default.AppSettings)
-            ?? throw new InvalidDataException("Settings file contains invalid JSON.");
+        AppSettings settings;
+        try
+        {
+            settings = JsonSerializer.Deserialize(File.ReadAllText(path), AppJsonContext.Default.AppSettings)
+                ?? throw new InvalidDataException("Settings file contains invalid JSON.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException($"{path} is not valid JSON: {exception.Message}", exception);
+        }
 
         if (!Uri.TryCreate(settings.DiscordWebhookUrl, UriKind.Absolute, out var webhookUri) || webhookUri.Scheme != Uri.UriSchemeHttps)
         {

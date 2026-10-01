@@ -7,7 +7,11 @@ using FaNotify.State;
 
 namespace FaNotify.Serialization;
 
-[JsonSourceGenerationOptions(JsonSerializerDefaults.Web, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSourceGenerationOptions(
+    JsonSerializerDefaults.Web,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    ReadCommentHandling = JsonCommentHandling.Skip,
+    AllowTrailingCommas = true)]
 [JsonSerializable(typeof(AppSettings))]
 [JsonSerializable(typeof(NotificationState))]
 [JsonSerializable(typeof(DiscordPayload))]

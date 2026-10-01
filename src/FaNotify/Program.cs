@@ -14,17 +14,17 @@ var startupLogger = loggerProvider.CreateLogger("Startup");
 startupLogger.WritingLogFile(logPath);
 
 AppConfig config;
+LoadedCookies cookies;
 try
 {
     config = AppConfig.Load();
+    cookies = CookieFile.Load(config.CookieFile);
 }
 catch (Exception exception)
 {
-    startupLogger.ConfigurationFailed(exception.Message);
-    throw;
+    startupLogger.StartupFailed(exception.Message);
+    return 1;
 }
-
-var cookies = CookieFile.Load(config.CookieFile);
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
@@ -67,3 +67,4 @@ builder.Services.AddHttpClient(HttpClientNames.Solver, client =>
 builder.Services.AddHostedService<NotifierWorker>();
 
 await builder.Build().RunAsync();
+return 0;

@@ -7,8 +7,8 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Information, Message = "Writing this run's log to {LogPath}.")]
     public static partial void WritingLogFile(this ILogger logger, string logPath);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Configuration loading failed: {Message}")]
-    public static partial void ConfigurationFailed(this ILogger logger, string message);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Startup failed: {Message}")]
+    public static partial void StartupFailed(this ILogger logger, string message);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "FlareSolverr is ready.")]
     public static partial void SolverReady(this ILogger logger);
