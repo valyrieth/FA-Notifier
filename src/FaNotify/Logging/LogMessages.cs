@@ -91,6 +91,9 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Debug, Message = "Received HTTP {Status} from {Host}{Path} ({Length} characters).")]
     public static partial void ReceivedPage(this ILogger logger, int status, string host, string path, int length);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Retrying {Operation} after {Reason} (attempt {Attempt} of {MaxAttempts}) in {Delay:0.#}s.")]
+    public static partial void RetryingRequest(this ILogger logger, string operation, string reason, int attempt, int maxAttempts, double delay);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sending Discord batch {Batch} with {Count} notification(s).")]
     public static partial void SendingBatch(this ILogger logger, int batch, int count);
 

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using FaNotify.Http;
 using FaNotify.Logging;
 using FaNotify.Notifications;
 using Microsoft.Extensions.Logging;
@@ -73,7 +74,7 @@ internal static class DiscordWebhook
                 payload["content"] = prefix;
             }
 
-            using var response = await client.PostAsJsonAsync(webhookUrl, payload, cancellationToken);
+            using var response = await HttpRetry.SendAsync(token => client.PostAsJsonAsync(webhookUrl, payload, token), logger, "Discord webhook request", cancellationToken);
             response.EnsureSuccessStatusCode();
             foreach (var notification in batch)
             {

@@ -57,6 +57,12 @@ Edit `settings.json`:
 | `userAgent` | Firefox UA | User-Agent sent to FurAffinity. |
 | `useFlareSolverr` | `false` | Use the optional browser-based FlareSolverr service to fetch FA pages. |
 
+## Reliability
+
+Requests to Fur Affinity and Discord are retried up to four attempts in total when the failure looks temporary: timeouts, connection errors, and HTTP 408, 429, or 5xx responses. A `Retry-After` header (for example from Discord's rate limiting) is honoured; otherwise the wait doubles from 2 seconds. Waits are capped at 60 seconds, and each retry is logged as a warning. Other errors, such as a login redirect or a 403 from Cloudflare, are not retried and go through the normal failed-check handling.
+
+In the rare case that Discord processes a post but the response is lost or an error follows, the retry can post that batch twice.
+
 ## Optional Cloudflare Solver
 
 FlareSolverr runs a separate Chromium-based browser and uses more memory than the notifier. To enable it, set `useFlareSolverr` to `true` in `settings.json`, then start the solver profile:

@@ -3,6 +3,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using FaNotify.Http;
 using FaNotify.Logging;
 using FaNotify.Notifications;
 using FaNotify.Solver;
@@ -136,7 +137,7 @@ internal static partial class FaNotifications
             return (page.StatusCode, page.Html, finalUri);
         }
 
-        using var response = await client.GetAsync(target, cancellationToken);
+        using var response = await HttpRetry.SendAsync(token => client.GetAsync(target, token), logger, "Fur Affinity request", cancellationToken);
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
         var responseUri = response.RequestMessage?.RequestUri ?? target;
         logger.ReceivedPage((int)response.StatusCode, responseUri.Host, responseUri.AbsolutePath, html.Length);
