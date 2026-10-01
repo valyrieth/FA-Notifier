@@ -64,6 +64,10 @@ Requests to Fur Affinity and Discord are retried up to four attempts in total wh
 
 In the rare case that Discord processes a post but the response is lost or an error follows, the retry can post that batch twice.
 
+## Health check
+
+After every successful check the notifier writes a "healthy until" timestamp to `./fa-notifier/data/healthy-until`. The container's Docker health check passes while that time is in the future, which allows roughly two missed polls plus five minutes. If checks keep failing (for example because the cookies expired) or the loop is stuck, `docker compose ps` shows the container as `unhealthy`. Docker does not restart unhealthy containers by itself; use it for monitoring or an autoheal tool.
+
 ## Optional Cloudflare Solver
 
 FlareSolverr runs a separate Chromium-based browser and uses more memory than the notifier. To enable it, set `useFlareSolverr` to `true` in `settings.json`, then start the solver profile:

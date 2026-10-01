@@ -22,6 +22,7 @@ internal sealed class NotifierWorker(
     private const int LowTrafficIntervalMinutes = 1;
     private static readonly TimeSpan CookieExpiryWarning = TimeSpan.FromDays(7);
     private static readonly TimeSpan CookieWarningRepeat = TimeSpan.FromDays(1);
+    private static readonly TimeSpan HealthGracePeriod = TimeSpan.FromMinutes(5);
 
     private DateTimeOffset? lastCookieWarning;
 
@@ -99,6 +100,7 @@ internal sealed class NotifierWorker(
                 }
 
                 await WarnIfCookiesExpiringAsync(discordClient, stoppingToken);
+                WriteHealthFile();
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -219,6 +221,20 @@ internal sealed class NotifierWorker(
         }
 
         return newItems;
+    }
+
+    // The Docker HEALTHCHECK compares this timestamp with the clock, so it needs no knowledge of the poll interval.
+    private void WriteHealthFile()
+    {
+        try
+        {
+            var healthyUntil = DateTimeOffset.UtcNow + (2 * TimeSpan.FromMinutes(config.IntervalMinutes)) + HealthGracePeriod;
+            File.WriteAllText(config.HealthFile, healthyUntil.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            logger.HealthFileFailed(exception.Message);
+        }
     }
 
     private async Task WarnIfCookiesExpiringAsync(HttpClient discordClient, CancellationToken cancellationToken)

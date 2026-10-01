@@ -33,4 +33,6 @@ chown "$PUID:$PGID" /data /logs
 exec su-exec "$PUID:$PGID" dotnet /app/FaNotify.dll "$@"
 EOF
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+HEALTHCHECK --interval=60s --timeout=5s --start-period=3m --retries=2 \
+  CMD ["sh", "-c", "[ \"$(cat /data/healthy-until 2>/dev/null || echo 0)\" -gt \"$(date +%s)\" ]"]
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

@@ -73,6 +73,9 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Warning, Message = "The session cookies expire on {Expiry}.")]
     public static partial void CookiesExpiringSoon(this ILogger logger, string expiry);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not write the health file: {Message}")]
+    public static partial void HealthFileFailed(this ILogger logger, string message);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Next check in {Minutes:0.#} minute(s).")]
     public static partial void NextCheck(this ILogger logger, double minutes);
 

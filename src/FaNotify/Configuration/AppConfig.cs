@@ -8,6 +8,7 @@ namespace FaNotify.Configuration;
 internal sealed record AppConfig(
     string CookieFile,
     string StateFile,
+    string HealthFile,
     string WebhookUrl,
     string UserAgent,
     string NotificationPrefix,
@@ -60,6 +61,7 @@ internal sealed record AppConfig(
         return new AppConfig(
             "/app/cookies.txt",
             "/data/notifications.json",
+            "/data/healthy-until",
             webhookUri.ToString(),
             settings.UserAgent ?? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0",
             settings.NotificationPrefix ?? string.Empty,
