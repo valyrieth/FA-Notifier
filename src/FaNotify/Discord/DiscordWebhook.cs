@@ -13,6 +13,7 @@ internal static class DiscordWebhook
         string webhookUrl,
         string prefix,
         IReadOnlyList<NotificationItem> notifications,
+        Action<IReadOnlyList<NotificationItem>>? onBatchDelivered,
         CancellationToken cancellationToken)
     {
         foreach (var (index, batch) in notifications.Chunk(10).Index())
@@ -78,6 +79,8 @@ internal static class DiscordWebhook
             {
                 logger.NotificationAccepted(notification.Type, notification.Id, notification.Title);
             }
+
+            onBatchDelivered?.Invoke(batch);
         }
     }
 

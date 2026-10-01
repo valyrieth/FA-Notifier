@@ -41,7 +41,7 @@ PUID="$(id -u)" PGID="$(id -g)" docker compose up -d --build
 
 The notifier runs as that non-root UID/GID. Creating the data and log folders before starting keeps their parent directory owned by your host user. Check startup with `docker compose logs -f fa-notify`.
 
-The Compose bind mounts keep state in `./fa-notifier/data/notifications.json` and create a unique log file under `./fa-notifier/logs/` on every boot. Each notification is logged as delivered only after Discord accepts its batch. Stop the service with `docker compose down`; the notification history and log files remain on the host.
+The Compose bind mounts keep state in `./fa-notifier/data/notifications.json` and create a unique log file under `./fa-notifier/logs/` on every boot. Each notification is logged as delivered only after Discord accepts its batch, and the saved state is updated after every accepted batch, so a failure part-way through a large set does not cause already-delivered items to be sent again. Stop the service with `docker compose down`; the notification history and log files remain on the host.
 
 ## Settings
 
@@ -75,7 +75,7 @@ At startup, the notifier logs the current Fur Affinity registered-user count. If
 
 If a check fails, the notifier sends one Discord alert noting that the session cookies may have expired. It avoids repeating the alert for every failed poll and sends a recovery alert after the next successful check. Detailed failure information remains in the application log.
 
-Every check loads the detail page of each category that has unread items, so a new item is found even when the unread count does not change (for example, one item is read while another arrives). Items already delivered are skipped using IDs stored in `./fa-notifier/data/notifications.json`; the first check sends all current unread items. Here, “seen” means successfully sent by this notifier; it is not a Discord read receipt or a mark-as-read action on Fur Affinity. If a category's row markup is not recognized, the notifier falls back to a count-only alert. Failed checks and failed Discord sends do not replace the saved state.
+Every check loads the detail page of each category that has unread items, so a new item is found even when the unread count does not change (for example, one item is read while another arrives). Items already delivered are skipped using IDs stored in `./fa-notifier/data/notifications.json`; the first check sends all current unread items. Here, “seen” means successfully sent by this notifier; it is not a Discord read receipt or a mark-as-read action on Fur Affinity. If a category's row markup is not recognized, the notifier falls back to a count-only alert. Failed checks do not change the saved state, and a failed Discord send keeps only the batches Discord accepted.
 
 If Fur Affinity redirects to login, refresh `cookies.txt` and restart the container.
 

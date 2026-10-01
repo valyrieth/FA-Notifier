@@ -66,22 +66,20 @@ internal sealed class NotifierWorker(
                 var newItems = CollectNewItems(snapshot, state);
                 if (newItems.Count > 0)
                 {
-                    await DiscordWebhook.SendAsync(discordClient, logger, config.WebhookUrl, config.NotificationPrefix, newItems, stoppingToken);
-                    foreach (var item in newItems)
-                    {
-                        state.SeenItems[item.Id] = DateTimeOffset.UtcNow;
-                    }
-
+                    await DiscordWebhook.SendAsync(
+                        discordClient,
+                        logger,
+                        config.WebhookUrl,
+                        config.NotificationPrefix,
+                        newItems,
+                        delivered => RecordDelivered(state, delivered),
+                        stoppingToken);
                     logger.SentItems(newItems.Count);
                 }
                 else
                 {
                     logger.NoNewItems();
                 }
-
-                state.TrimSeenItems();
-                StateFile.Save(config.StateFile, state);
-                logger.StateSaved(state.SeenItems.Count);
 
                 if (failureAlertSent
                     && await TrySendStatusAlertAsync(
@@ -206,6 +204,18 @@ internal sealed class NotifierWorker(
         return newItems;
     }
 
+    private void RecordDelivered(NotificationState state, IReadOnlyList<NotificationItem> delivered)
+    {
+        foreach (var item in delivered)
+        {
+            state.SeenItems[item.Id] = DateTimeOffset.UtcNow;
+        }
+
+        state.TrimSeenItems();
+        StateFile.Save(config.StateFile, state);
+        logger.StateSaved(state.SeenItems.Count);
+    }
+
     private async Task<bool> TrySendStatusAlertAsync(HttpClient discordClient, string alertName, string title, string description, CancellationToken cancellationToken)
     {
         try
@@ -216,6 +226,7 @@ internal sealed class NotifierWorker(
                 config.WebhookUrl,
                 config.NotificationPrefix,
                 [new NotificationItem($"status:{alertName}", "status", title, description, "https://www.furaffinity.net/", null, null, null)],
+                null,
                 cancellationToken);
             logger.StatusAlertSent(alertName);
             return true;
