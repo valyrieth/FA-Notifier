@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using FaNotify.Notifications;
+using FaNotify.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace FaNotify.Configuration;
@@ -18,12 +19,10 @@ internal sealed record AppConfig(
     bool UseFlareSolverr,
     HashSet<string> NotifyOn)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
     public static AppConfig Load()
     {
         var path = Environment.GetEnvironmentVariable("FA_NOTIFY_CONFIG") ?? "/app/settings.json";
-        var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), JsonOptions)
+        var settings = JsonSerializer.Deserialize(File.ReadAllText(path), AppJsonContext.Default.AppSettings)
             ?? throw new InvalidDataException("Settings file contains invalid JSON.");
 
         if (!Uri.TryCreate(settings.DiscordWebhookUrl, UriKind.Absolute, out var webhookUri) || webhookUri.Scheme != Uri.UriSchemeHttps)
@@ -49,7 +48,6 @@ internal sealed record AppConfig(
             throw new InvalidOperationException("logLevel must be one of: Trace, Debug, Information, Warning, Error, Critical, None.");
         }
 
-        var solverSetting = Environment.GetEnvironmentVariable("FA_USE_FLARESOLVERR") ?? "false";
         var notifyOn = (settings.NotifyOn ?? NotificationTypes.All)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var invalidTypes = notifyOn.Except(NotificationTypes.All, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -71,14 +69,4 @@ internal sealed record AppConfig(
             settings.UseFlareSolverr ?? false,
             notifyOn);
     }
-
-    private sealed record Settings(
-        string? DiscordWebhookUrl,
-        int PollIntervalMinutes = 30,
-        int FailureAlertThreshold = 3,
-        string[]? NotifyOn = null,
-        string? NotificationPrefix = null,
-        string? UserAgent = null,
-        bool? UseFlareSolverr = null,
-        string? LogLevel = "Information");
 }

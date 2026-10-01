@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using FaNotify.Http;
 using FaNotify.Logging;
 using FaNotify.Notifications;
+using FaNotify.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace FaNotify.Discord;
@@ -20,61 +21,14 @@ internal static class DiscordWebhook
         foreach (var (index, batch) in notifications.Chunk(10).Index())
         {
             logger.SendingBatch(index + 1, batch.Length);
-            var embeds = batch.Select(notification =>
-            {
-                var embed = new Dictionary<string, object>
-                {
-                    ["title"] = Limit($"{Capitalize(notification.Type)}: {notification.Title}", 256),
-                    ["description"] = notification.Description,
-                    ["url"] = notification.Url,
-                    ["color"] = notification.Type switch
-                    {
-                        "submissions" => 0x2E8B57,
-                        "watches" => 0x5865F2,
-                        "comments" => 0xE67E22,
-                        "favorites" => 0xE84393,
-                        "journals" => 0x3498DB,
-                        _ => 0x7F8C8D
-                    },
-                    ["footer"] = new { text = "FurAffinity Notify" },
-                    ["timestamp"] = DateTimeOffset.UtcNow
-                };
+            var content = index == 0 && !string.IsNullOrWhiteSpace(prefix) ? prefix : null;
+            var payload = new DiscordPayload(content, batch.Select(ToEmbed).ToArray());
 
-                if (!string.IsNullOrWhiteSpace(notification.ActorName))
-                {
-                    var author = new Dictionary<string, string> { ["name"] = notification.ActorName };
-                    if (notification.ActorUrl is not null)
-                    {
-                        author["url"] = notification.ActorUrl;
-                    }
-
-                    if (notification.ActorIconUrl is not null)
-                    {
-                        author["icon_url"] = notification.ActorIconUrl;
-                    }
-
-                    embed["author"] = author;
-                }
-
-                if (notification.ImageUrl is not null)
-                {
-                    embed["image"] = new { url = notification.ImageUrl };
-                }
-                else if (notification.ActorIconUrl is not null)
-                {
-                    embed["thumbnail"] = new { url = notification.ActorIconUrl };
-                }
-
-                return embed;
-            }).ToArray();
-
-            var payload = new Dictionary<string, object> { ["embeds"] = embeds };
-            if (index == 0 && !string.IsNullOrWhiteSpace(prefix))
-            {
-                payload["content"] = prefix;
-            }
-
-            using var response = await HttpRetry.SendAsync(token => client.PostAsJsonAsync(webhookUrl, payload, token), logger, "Discord webhook request", cancellationToken);
+            using var response = await HttpRetry.SendAsync(
+                token => client.PostAsJsonAsync(webhookUrl, payload, AppJsonContext.Default.DiscordPayload, token),
+                logger,
+                "Discord webhook request",
+                cancellationToken);
             response.EnsureSuccessStatusCode();
             foreach (var notification in batch)
             {
@@ -84,6 +38,29 @@ internal static class DiscordWebhook
             onBatchDelivered?.Invoke(batch);
         }
     }
+
+    private static DiscordEmbed ToEmbed(NotificationItem notification) => new(
+        Limit($"{Capitalize(notification.Type)}: {notification.Title}", 256),
+        notification.Description,
+        notification.Url,
+        GetColor(notification.Type),
+        new DiscordFooter("FurAffinity Notify"),
+        DateTimeOffset.UtcNow,
+        string.IsNullOrWhiteSpace(notification.ActorName)
+            ? null
+            : new DiscordAuthor(notification.ActorName, notification.ActorUrl, notification.ActorIconUrl),
+        notification.ImageUrl is null ? null : new DiscordImage(notification.ImageUrl),
+        notification.ImageUrl is null && notification.ActorIconUrl is not null ? new DiscordImage(notification.ActorIconUrl) : null);
+
+    private static int GetColor(string type) => type switch
+    {
+        "submissions" => 0x2E8B57,
+        "watches" => 0x5865F2,
+        "comments" => 0xE67E22,
+        "favorites" => 0xE84393,
+        "journals" => 0x3498DB,
+        _ => 0x7F8C8D
+    };
 
     private static string Capitalize(string value) => char.ToUpperInvariant(value[0]) + value[1..];
 

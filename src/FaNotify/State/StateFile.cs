@@ -1,11 +1,10 @@
 using System.Text.Json;
+using FaNotify.Serialization;
 
 namespace FaNotify.State;
 
 internal static class StateFile
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     public static NotificationState Load(string path)
     {
         if (!File.Exists(path))
@@ -14,7 +13,7 @@ internal static class StateFile
         }
 
         var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<NotificationState>(json, JsonOptions)
+        return JsonSerializer.Deserialize(json, AppJsonContext.Default.NotificationState)
             ?? throw new InvalidDataException("Notification state file contains invalid JSON.");
     }
 
@@ -27,7 +26,7 @@ internal static class StateFile
         }
 
         var temporaryPath = $"{path}.tmp";
-        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(state, JsonOptions));
+        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(state, AppJsonContext.Default.NotificationState));
         File.Move(temporaryPath, path, overwrite: true);
     }
 }

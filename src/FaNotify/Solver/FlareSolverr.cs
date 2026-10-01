@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FaNotify.Logging;
+using FaNotify.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace FaNotify.Solver;
@@ -43,27 +44,12 @@ internal static class FlareSolverr
     {
         var cookies = cookieContainer.GetCookies(target)
             .Cast<Cookie>()
-            .Select(cookie => new
-            {
-                name = cookie.Name,
-                value = cookie.Value,
-                domain = cookie.Domain,
-                path = cookie.Path,
-                secure = cookie.Secure,
-                httpOnly = cookie.HttpOnly
-            })
+            .Select(cookie => new SolverCookie(cookie.Name, cookie.Value, cookie.Domain, cookie.Path, cookie.Secure, cookie.HttpOnly))
             .ToArray();
 
-        var request = new
-        {
-            cmd = "request.get",
-            url = target.AbsoluteUri,
-            maxTimeout = 60000,
-            disableMedia = true,
-            cookies
-        };
+        var request = new SolverRequest("request.get", target.AbsoluteUri, 60000, true, cookies);
 
-        using var response = await client.PostAsJsonAsync(ServiceUrl, request, cancellationToken);
+        using var response = await client.PostAsJsonAsync(ServiceUrl, request, AppJsonContext.Default.SolverRequest, cancellationToken);
         response.EnsureSuccessStatusCode();
         using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
         var root = document.RootElement;
