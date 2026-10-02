@@ -33,7 +33,7 @@ internal static class FlareSolverr
         throw new InvalidOperationException("FlareSolverr did not become ready. Start it with the Docker Compose solver profile.");
     }
 
-    public static async Task<(HttpStatusCode StatusCode, string Html, Uri? FinalUri)> FetchPageAsync(
+    public static async Task<SolverPage> FetchPageAsync(
         HttpClient client,
         Uri target,
         CookieContainer cookieContainer,
@@ -64,7 +64,57 @@ internal static class FlareSolverr
         var statusCode = solution.TryGetProperty("status", out var pageStatus)
             ? (HttpStatusCode)pageStatus.GetInt32()
             : HttpStatusCode.OK;
+        var userAgent = solution.TryGetProperty("userAgent", out var agent) ? agent.GetString() : null;
 
-        return (statusCode, html, finalUri);
+        return new SolverPage(statusCode, html, finalUri, ReadCookies(solution), userAgent);
     }
+
+    private static List<Cookie> ReadCookies(JsonElement solution)
+    {
+        List<Cookie> cookies = [];
+        if (!solution.TryGetProperty("cookies", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return cookies;
+        }
+
+        foreach (var item in items.EnumerateArray())
+        {
+            var name = ReadString(item, "name");
+            var domain = ReadString(item, "domain");
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(domain))
+            {
+                continue;
+            }
+
+            try
+            {
+                var cookie = new Cookie(name, ReadString(item, "value") ?? string.Empty, ReadString(item, "path") ?? "/", domain)
+                {
+                    Secure = item.TryGetProperty("secure", out var secure) && secure.ValueKind == JsonValueKind.True,
+                    HttpOnly = item.TryGetProperty("httpOnly", out var httpOnly) && httpOnly.ValueKind == JsonValueKind.True
+                };
+
+                // FlareSolverr reports expiry in seconds under "expiry" or "expires"; session cookies are absent or <= 0.
+                var seconds = ReadSeconds(item, "expiry") ?? ReadSeconds(item, "expires");
+                if (seconds is > 0)
+                {
+                    cookie.Expires = DateTimeOffset.FromUnixTimeSeconds((long)seconds.Value).UtcDateTime;
+                }
+
+                cookies.Add(cookie);
+            }
+            catch (Exception exception) when (exception is CookieException or ArgumentException)
+            {
+                // A cookie .NET rejects (for example an invalid name) is simply not reused.
+            }
+        }
+
+        return cookies;
+    }
+
+    private static string? ReadString(JsonElement item, string name) =>
+        item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static double? ReadSeconds(JsonElement item, string name) =>
+        item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null;
 }

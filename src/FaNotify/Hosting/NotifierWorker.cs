@@ -53,7 +53,7 @@ internal sealed class NotifierWorker(
                 var snapshot = await FaNotifications.FetchAsync(
                     faClient,
                     solverClient,
-                    cookies.Container,
+                    cookies,
                     config.UseFlareSolverr,
                     logger,
                     stoppingToken);

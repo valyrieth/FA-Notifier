@@ -43,12 +43,12 @@ internal static partial class FaNotifications
     public static async Task<NotificationSnapshot> FetchAsync(
         HttpClient client,
         HttpClient solverClient,
-        CookieContainer cookieContainer,
+        CookieSession cookies,
         bool useFlareSolverr,
         ILogger logger,
         CancellationToken cancellationToken)
     {
-        var homePage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, logger, HomePage, cancellationToken);
+        var homePage = await DownloadPageAsync(client, solverClient, cookies, useFlareSolverr, logger, HomePage, cancellationToken);
         var document = ParseDocument(homePage);
         var registeredUsers = ParseRegisteredUserCount(document);
 
@@ -97,7 +97,7 @@ internal static partial class FaNotifications
                 continue;
             }
 
-            var detailPage = await DownloadPageAsync(client, solverClient, cookieContainer, useFlareSolverr, logger, categoryUrl, cancellationToken);
+            var detailPage = await DownloadPageAsync(client, solverClient, cookies, useFlareSolverr, logger, categoryUrl, cancellationToken);
             var detailDocument = ParseDocument(detailPage);
             var section = detailDocument.DocumentNode.SelectSingleNode($"//*[@id='messages-{type}']") ?? detailDocument.DocumentNode;
             var rows = GetRows(section, type);
@@ -131,30 +131,52 @@ internal static partial class FaNotifications
         return count;
     }
 
+    // FlareSolverr starts a real browser, so it is only used when Cloudflare actually challenges a normal request.
     private static async Task<(HttpStatusCode StatusCode, string Html, Uri Uri)> DownloadPageAsync(
         HttpClient client,
         HttpClient solverClient,
-        CookieContainer cookieContainer,
+        CookieSession cookies,
         bool useFlareSolverr,
         ILogger logger,
         Uri target,
         CancellationToken cancellationToken)
     {
-        logger.FetchingPage(target.Host, target.AbsolutePath, useFlareSolverr ? "FlareSolverr" : "HTTP client");
-        if (useFlareSolverr)
-        {
-            var page = await FlareSolverr.FetchPageAsync(solverClient, target, cookieContainer, cancellationToken);
-            var finalUri = page.FinalUri ?? target;
-            logger.ReceivedPage((int)page.StatusCode, finalUri.Host, finalUri.AbsolutePath, page.Html.Length);
-            return (page.StatusCode, page.Html, finalUri);
-        }
+        logger.FetchingPage(target.Host, target.AbsolutePath);
+        using var response = await HttpRetry.SendAsync(
+            async token =>
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, target);
+                if (cookies.ClearanceUserAgent is { } userAgent)
+                {
+                    request.Headers.UserAgent.Clear();
+                    request.Headers.UserAgent.ParseAdd(userAgent);
+                }
 
-        using var response = await HttpRetry.SendAsync(token => client.GetAsync(target, token), logger, "Fur Affinity request", cancellationToken);
+                return await client.SendAsync(request, token);
+            },
+            logger,
+            "Fur Affinity request",
+            cancellationToken);
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
         var responseUri = response.RequestMessage?.RequestUri ?? target;
         logger.ReceivedPage((int)response.StatusCode, responseUri.Host, responseUri.AbsolutePath, html.Length);
-        return (response.StatusCode, html, responseUri);
+        if (!useFlareSolverr || !IsCloudflareChallenge(response.StatusCode, html))
+        {
+            return (response.StatusCode, html, responseUri);
+        }
+
+        logger.SolverFallback(target.Host, target.AbsolutePath, (int)response.StatusCode);
+        var solved = await FlareSolverr.FetchPageAsync(solverClient, target, cookies.Container, cancellationToken);
+        cookies.ImportSolverResult(solved.Cookies, solved.UserAgent);
+        logger.ReceivedPage((int)solved.StatusCode, solved.FinalUri.Host, solved.FinalUri.AbsolutePath, solved.Html.Length);
+        return (solved.StatusCode, solved.Html, solved.FinalUri);
     }
+
+    private static bool IsCloudflareChallenge(HttpStatusCode status, string html) =>
+        status is HttpStatusCode.Forbidden or HttpStatusCode.ServiceUnavailable
+        && (html.Contains("cloudflare", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("cf-chl-", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("challenge-platform", StringComparison.OrdinalIgnoreCase));
 
     private static HtmlDocument ParseDocument((HttpStatusCode StatusCode, string Html, Uri Uri) page)
     {
@@ -165,9 +187,7 @@ internal static partial class FaNotifications
 
         if (page.StatusCode == HttpStatusCode.Forbidden)
         {
-            var challengedByCloudflare = page.Html.Contains("cloudflare", StringComparison.OrdinalIgnoreCase)
-                || page.Html.Contains("cf-chl-", StringComparison.OrdinalIgnoreCase)
-                || page.Html.Contains("challenge-platform", StringComparison.OrdinalIgnoreCase);
+            var challengedByCloudflare = IsCloudflareChallenge(page.StatusCode, page.Html);
             var reason = challengedByCloudflare
                 ? "FurAffinity's Cloudflare security check blocked the request. Check the User-Agent and network/IP; cookies alone cannot pass this challenge."
                 : "FurAffinity denied the request. The session may be invalid, or the request may be blocked by FA's security rules.";

@@ -8,6 +8,7 @@ namespace FaNotify.FurAffinity;
 internal static class CookieFile
 {
     private const string SourceHashPrefix = "# source-sha256: ";
+    private const string UserAgentPrefix = "# user-agent: ";
 
     public static CookieSession Load(string sourcePath, string refreshedPath)
     {
@@ -18,13 +19,19 @@ internal static class CookieFile
 
         var sourceBytes = File.ReadAllBytes(sourcePath);
         var sourceHash = Convert.ToHexString(SHA256.HashData(sourceBytes));
-        var container = TryLoadRefreshed(refreshedPath, sourceHash) ?? Parse(Encoding.UTF8.GetString(sourceBytes).Split('\n'));
-        return new CookieSession(container, refreshedPath, sourceHash);
+        var refreshed = TryLoadRefreshed(refreshedPath, sourceHash);
+        var container = refreshed?.Container ?? Parse(Encoding.UTF8.GetString(sourceBytes).Split('\n'));
+        return new CookieSession(container, refreshedPath, sourceHash, refreshed?.UserAgent);
     }
 
-    public static void Save(string path, CookieContainer container, string sourceHash)
+    public static void Save(string path, CookieContainer container, string sourceHash, string? userAgent)
     {
         var lines = new List<string> { "# Netscape HTTP Cookie File", SourceHashPrefix + sourceHash };
+        if (!string.IsNullOrWhiteSpace(userAgent))
+        {
+            lines.Add(UserAgentPrefix + userAgent);
+        }
+
         lines.AddRange(CookieSession.ActiveCookies(container).Select(Format));
 
         var directory = Path.GetDirectoryName(path);
@@ -44,7 +51,7 @@ internal static class CookieFile
     }
 
     // The renewed cookies only apply to the export they came from; replacing cookies.txt discards them.
-    private static CookieContainer? TryLoadRefreshed(string path, string sourceHash)
+    private static (CookieContainer Container, string? UserAgent)? TryLoadRefreshed(string path, string sourceHash)
     {
         try
         {
@@ -54,7 +61,13 @@ internal static class CookieFile
             }
 
             var lines = File.ReadAllLines(path);
-            return lines.Contains(SourceHashPrefix + sourceHash) ? Parse(lines) : null;
+            if (!lines.Contains(SourceHashPrefix + sourceHash))
+            {
+                return null;
+            }
+
+            var userAgent = lines.FirstOrDefault(line => line.StartsWith(UserAgentPrefix, StringComparison.Ordinal))?[UserAgentPrefix.Length..];
+            return (Parse(lines), userAgent);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
         {

@@ -106,8 +106,11 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Debug, Message = "Parsed {Count} {Type} notification item(s).")]
     public static partial void ParsedItems(this ILogger logger, int count, string type);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Fetching Fur Affinity page {Host}{Path} via {Transport}.")]
-    public static partial void FetchingPage(this ILogger logger, string host, string path, string transport);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Fetching Fur Affinity page {Host}{Path}.")]
+    public static partial void FetchingPage(this ILogger logger, string host, string path);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cloudflare challenged {Host}{Path} (HTTP {Status}); solving it with FlareSolverr and reusing the clearance for later requests.")]
+    public static partial void SolverFallback(this ILogger logger, string host, string path, int status);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Received HTTP {Status} from {Host}{Path} ({Length} characters).")]
     public static partial void ReceivedPage(this ILogger logger, int status, string host, string path, int length);

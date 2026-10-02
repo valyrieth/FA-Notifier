@@ -73,7 +73,7 @@ Edit `settings.json`; `//` comments and trailing commas are allowed:
 | `notifyOn` | All types | Notification types: `submissions`, `watches`, `comments`, `favorites`, `journals`, `notes`. |
 | `notificationPrefix` | Empty | Optional text prepended to Discord messages. |
 | `userAgent` | Firefox UA | User-Agent sent to FurAffinity. |
-| `useFlareSolverr` | `false` | Use the optional browser-based FlareSolverr service to fetch FA pages. |
+| `useFlareSolverr` | `false` | Fall back to the optional browser-based FlareSolverr service when Cloudflare blocks a normal request. |
 | `flareSolverrUrl` | `http://flaresolverr:8191/v1` | FlareSolverr API endpoint. Change it if you rename the Compose service or run the solver elsewhere. |
 
 ## Reliability
@@ -95,6 +95,8 @@ docker compose --profile solver up -d --build
 ```
 
 The solver API is only available on the private Compose network; do not publish its port. FA cookies are sent to that local browser service. FlareSolverr can handle some browser challenges, but it may still fail if FA blocks the server's IP or requires a CAPTCHA.
+
+The solver is not used for every request. The notifier makes normal requests first and only calls FlareSolverr when Cloudflare answers with a challenge. It then keeps the Cloudflare clearance cookie and the solver browser's User-Agent, saves them in `./fa-notifier/data/cookies-refreshed.txt`, and reuses them, so FlareSolverr runs again only when the clearance expires or stops working. While a clearance is in use, requests send the solver browser's User-Agent instead of `userAgent`.
 
 ## Discord Notifications
 

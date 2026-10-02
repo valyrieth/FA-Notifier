@@ -1,4 +1,8 @@
+using System.Net;
+
 namespace FaNotify.Solver;
+
+internal sealed record SolverPage(HttpStatusCode StatusCode, string Html, Uri FinalUri, IReadOnlyList<Cookie> Cookies, string? UserAgent);
 
 internal sealed record SolverRequest(string Cmd, string Url, int MaxTimeout, bool DisableMedia, SolverCookie[] Cookies);
 
