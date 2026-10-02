@@ -98,7 +98,7 @@ The solver API is only available on the private Compose network; do not publish 
 
 ## Discord Notifications
 
-New items are sent as individual Discord embeds with their category, title, link, and available author/profile or submission artwork details. When the page provides an image or user icon, it is included in the embed. Large batches are split to respect Discord's embed limits.
+New items are sent as individual Discord embeds with their category, title, link, and available author/profile or submission artwork details. When the page provides an image or user icon, it is included in the embed. The embed's timestamp is the time Fur Affinity recorded for the event when the page shows one (watches, favorites, notes), otherwise the time the notifier saw it. Submissions show their rating (General, Mature, or Adult); the thumbnail is still included for every rating, so use an age-restricted Discord channel if you watch adult artists. Large batches are split to respect Discord's embed limits.
 
 At startup, the notifier logs the current Fur Affinity registered-user count. If it is below 15,000, it logs that checks are switching to once per minute. When the count reaches 15,000, it logs that normal polling has resumed. These status messages are written to the log file and container output, not sent to Discord.
 

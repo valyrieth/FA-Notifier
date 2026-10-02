@@ -45,7 +45,7 @@ internal static class DiscordWebhook
         notification.Url,
         GetColor(notification.Type),
         new DiscordFooter("FurAffinity Notify"),
-        DateTimeOffset.UtcNow,
+        notification.OccurredAt ?? DateTimeOffset.UtcNow,
         string.IsNullOrWhiteSpace(notification.ActorName)
             ? null
             : new DiscordAuthor(notification.ActorName, notification.ActorUrl, notification.ActorIconUrl),

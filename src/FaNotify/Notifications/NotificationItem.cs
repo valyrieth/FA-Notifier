@@ -9,4 +9,5 @@ internal sealed record NotificationItem(
     string? ActorName,
     string? ActorUrl,
     string? ImageUrl,
-    string? ActorIconUrl = null);
+    string? ActorIconUrl = null,
+    DateTimeOffset? OccurredAt = null);

@@ -34,6 +34,12 @@ internal static partial class FaNotifications
     [GeneratedRegex(@"/journal/(?<id>\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex JournalIdPattern();
 
+    [GeneratedRegex(@"/user/(?<name>[^/]+)", RegexOptions.IgnoreCase)]
+    private static partial Regex UserNamePattern();
+
+    [GeneratedRegex(@"\br-(?<rating>general|mature|adult)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RatingPattern();
+
     public static async Task<NotificationSnapshot> FetchAsync(
         HttpClient client,
         HttpClient solverClient,
@@ -206,6 +212,10 @@ internal static partial class FaNotifications
         }
 
         var actorName = actorAnchor is null ? null : NormalizeText(actorAnchor.InnerText);
+
+        // Watch rows link the avatar image, so the name sits next to it as plain text.
+        actorName ??= NormalizeText(row.SelectSingleNode(".//div[contains(concat(' ', normalize-space(@class), ' '), ' info ')]/span")?.InnerText)
+            ?? GetUserNameFromHref(actorAnchor);
         var actorUrl = actorAnchor is not null && TryGetFaUri(pageUri, actorAnchor.GetAttributeValue("href", string.Empty), out var parsedActorUrl)
             ? parsedActorUrl.ToString()
             : null;
@@ -225,13 +235,18 @@ internal static partial class FaNotifications
                 primaryAnchor.InnerText,
                 actorName,
                 type);
-        var description = GetDescription(row);
-        if (type == "watches" && !string.IsNullOrWhiteSpace(actorName))
+        var rawDescription = GetDescription(row);
+        var description = type switch
         {
-            description = $"{actorName} is now watching you.";
-        }
+            "watches" when actorName is not null => $"{actorName} is now watching you.",
+            "favorites" when actorName is not null => $"{actorName} favorited {title}",
+            "notes" when actorName is not null => $"New note from {actorName}.",
+            "submissions" when GetRating(row) is { } rating => $"Rating: {rating}",
+            _ => rawDescription
+        };
 
-        var id = CreateId(type, itemUri, actorName, description);
+        // The ID hashes the row's own text so rewording the message above does not change it.
+        var id = CreateId(type, itemUri, actorName, rawDescription);
         return new NotificationItem(
             id,
             type,
@@ -241,7 +256,28 @@ internal static partial class FaNotifications
             actorName,
             actorUrl,
             GetImageUrl(artwork, pageUri),
-            GetImageUrl(icon, pageUri));
+            GetImageUrl(icon, pageUri),
+            GetOccurredAt(row));
+    }
+
+    private static string? GetUserNameFromHref(HtmlNode? anchor)
+    {
+        var match = UserNamePattern().Match(anchor?.GetAttributeValue("href", string.Empty) ?? string.Empty);
+        return match.Success ? Uri.UnescapeDataString(match.Groups["name"].Value) : null;
+    }
+
+    private static string? GetRating(HtmlNode row)
+    {
+        var match = RatingPattern().Match(row.GetAttributeValue("class", string.Empty));
+        return match.Success ? char.ToUpperInvariant(match.Groups["rating"].Value[0]) + match.Groups["rating"].Value[1..].ToLowerInvariant() : null;
+    }
+
+    private static DateTimeOffset? GetOccurredAt(HtmlNode row)
+    {
+        var seconds = row.SelectSingleNode(".//*[@data-time]")?.GetAttributeValue("data-time", string.Empty);
+        return long.TryParse(seconds, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unixSeconds)
+            ? DateTimeOffset.FromUnixTimeSeconds(unixSeconds)
+            : null;
     }
 
     private static string CreateId(string type, Uri itemUri, string? actorName, string description)
