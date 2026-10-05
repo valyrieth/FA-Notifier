@@ -99,8 +99,9 @@ internal static partial class FaNotifications
 
             var detailPage = await DownloadPageAsync(client, solverClient, cookies, useFlareSolverr, logger, categoryUrl, cancellationToken);
             var detailDocument = ParseDocument(detailPage);
-            var section = detailDocument.DocumentNode.SelectSingleNode($"//*[@id='messages-{type}']") ?? detailDocument.DocumentNode;
-            var rows = GetRows(section, type);
+            var sectionId = type == "comments" ? "messages-comments-submission" : $"messages-{type}";
+            var section = detailDocument.DocumentNode.SelectSingleNode($"//*[@id='{sectionId}']");
+            var rows = section is null ? null : GetRows(section, type);
             var pageItems = rows?.Select(row => ParseItem(row, type, detailPage.Uri))
                 .OfType<NotificationItem>()
                 .ToArray() ?? [];
@@ -213,9 +214,10 @@ internal static partial class FaNotifications
         }
 
         var actorAnchor = anchors.FirstOrDefault(anchor => IsUserHref(anchor.GetAttributeValue("href", string.Empty)));
-        var primaryAnchors = anchors.Where(anchor => IsPrimaryHref(type, anchor.GetAttributeValue("href", string.Empty))).ToArray();
-        var primaryAnchor = primaryAnchors.FirstOrDefault(anchor => NormalizeText(anchor.InnerText) is not null)
-            ?? primaryAnchors.FirstOrDefault();
+        var primaryAnchor = anchors.FirstOrDefault(anchor =>
+                IsPrimaryHref(type, anchor.GetAttributeValue("href", string.Empty))
+                && NormalizeText(anchor.InnerText) is not null)
+            ?? anchors.FirstOrDefault(anchor => IsPrimaryHref(type, anchor.GetAttributeValue("href", string.Empty)));
         if (primaryAnchor is null && type == "notes")
         {
             primaryAnchor = anchors.FirstOrDefault(anchor => !IsUserHref(anchor.GetAttributeValue("href", string.Empty)));
@@ -240,10 +242,10 @@ internal static partial class FaNotifications
             ? parsedActorUrl.ToString()
             : null;
         var images = row.SelectNodes(".//img[@src or @data-src]")?.ToArray() ?? [];
-        var icon = images.FirstOrDefault(image => IsAvatarImage(image.GetAttributeValue("src", image.GetAttributeValue("data-src", string.Empty)), actorName));
+        var icon = images.FirstOrDefault(image => IsAvatarImage(GetImageSource(image), actorName));
         var artwork = images.FirstOrDefault(image =>
         {
-            var source = image.GetAttributeValue("src", image.GetAttributeValue("data-src", string.Empty));
+            var source = GetImageSource(image);
             return !IsAvatarImage(source, actorName) && !source.Contains("/themes/", StringComparison.OrdinalIgnoreCase);
         });
         var titleNode = row.SelectSingleNode(".//*[contains(concat(' ', normalize-space(@class), ' '), ' journal_subject ')]");
@@ -378,9 +380,11 @@ internal static partial class FaNotifications
             return null;
         }
 
-        var source = image.GetAttributeValue("src", image.GetAttributeValue("data-src", string.Empty));
-        return TryGetFaUri(pageUri, source, out var uri) ? uri.ToString() : null;
+        return TryGetFaUri(pageUri, GetImageSource(image), out var uri) ? uri.ToString() : null;
     }
+
+    private static string GetImageSource(HtmlNode image) =>
+        image.GetAttributeValue("src", image.GetAttributeValue("data-src", string.Empty));
 
     private static string? GetTypeFromHref(string href) => NotificationTypes.All.FirstOrDefault(type =>
         href.Contains(type == "notes" ? "pms" : type, StringComparison.OrdinalIgnoreCase));
