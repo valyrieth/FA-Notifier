@@ -1,0 +1,4 @@
+# Applied automatically in a clone: builds the image from source instead of pulling it.
+services:
+  fa-notify:
+    build: .

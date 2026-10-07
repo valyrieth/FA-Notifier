@@ -12,18 +12,31 @@ It reports new **submissions, watches, comments, favorites, journals and notes**
 
 ## Quick start
 
-1. **Export your login** to `cookies.txt` in this folder ([step 1](#1-export-fur-affinity-cookies)).
+1. **Export your login** to `cookies.txt` ([step 1](#1-export-fur-affinity-cookies)).
 2. **Create a Discord webhook** and copy its URL ([step 2](#2-create-a-discord-webhook)).
-3. **Configure and start** ([step 3](#3-configure-and-start-the-notifier)):
+3. **Configure and start** ([step 3](#3-configure-and-start-the-notifier)). Using the published image, no clone needed:
+
+   ```sh
+   mkdir fa-notify && cd fa-notify
+   curl -fsSLO https://raw.githubusercontent.com/valyrieth/FA-Notifier/main/docker-compose.yml
+   curl -fsSL https://raw.githubusercontent.com/valyrieth/FA-Notifier/main/settings.example.json -o settings.json
+   # copy cookies.txt into this folder and paste your webhook URL into settings.json
+   mkdir -p fa-notifier/data fa-notifier/logs
+   PUID="$(id -u)" PGID="$(id -g)" docker compose up -d
+   docker compose logs -f fa-notify           # the first line shows the version
+   ```
+
+   Make sure `cookies.txt` and `settings.json` exist before starting; otherwise Docker creates empty folders with those names.
+
+   Or build from a clone of this repository (`docker-compose.override.yml` makes Compose build locally):
 
    ```sh
    cp settings.example.json settings.json     # then paste your webhook URL into it
    mkdir -p fa-notifier/data fa-notifier/logs
    PUID="$(id -u)" PGID="$(id -g)" docker compose up -d --build
-   docker compose logs -f fa-notify           # the first line shows the version
    ```
 
-The first check sends every notification you currently have unread, so expect a burst of messages on first start. To update later, run `git pull` and the same `docker compose up -d --build`.
+The first check sends every notification you currently have unread, so expect a burst of messages on first start. To update the published image, run `docker compose pull && docker compose up -d`; from a clone, run `git pull` and `docker compose up -d --build`.
 
 ## Setup
 
@@ -64,10 +77,10 @@ This project posts through a channel webhook; it does not require creating a Dis
 
 ### 3. Configure and start the notifier
 
-From the repository root:
+From the folder that holds `docker-compose.yml` (a clone of this repository, or the folder from the quick start):
 
 ```sh
-cp settings.example.json settings.json
+cp settings.example.json settings.json     # skip if you downloaded settings.json already
 mkdir -p fa-notifier/data fa-notifier/logs
 ```
 
@@ -76,7 +89,8 @@ Edit `settings.json` and replace `discordWebhookUrl` with the webhook URL. `logL
 Set the container's runtime user to match your host user, then start the service:
 
 ```sh
-PUID="$(id -u)" PGID="$(id -g)" docker compose up -d --build
+PUID="$(id -u)" PGID="$(id -g)" docker compose up -d          # published image
+PUID="$(id -u)" PGID="$(id -g)" docker compose up -d --build  # from a clone: build locally
 ```
 
 The notifier runs as that non-root UID/GID. Creating the data and log folders before starting keeps their parent directory owned by your host user. Check startup with `docker compose logs -f fa-notify`.
@@ -114,7 +128,8 @@ After every successful check the notifier writes a "healthy until" timestamp to 
 FlareSolverr runs a separate Chromium-based browser and uses more memory than the notifier. To enable it, set `useFlareSolverr` to `true` in `settings.json`, then start the solver profile:
 
 ```sh
-docker compose --profile solver up -d --build
+docker compose --profile solver up -d            # published image
+docker compose --profile solver up -d --build    # from a clone: build locally
 ```
 
 The solver API is only available on the private Compose network; do not publish its port. FA cookies are sent to that local browser service. FlareSolverr can handle some browser challenges, but it may still fail if FA blocks the server's IP or requires a CAPTCHA.

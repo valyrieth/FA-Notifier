@@ -1,7 +1,7 @@
 services:
   fa-notify:
     container_name: fa-notify
-    build: .
+    image: ghcr.io/valyrieth/fa-notifier:latest
     restart: unless-stopped
     environment:
       FA_NOTIFY_CONFIG: /app/settings.json
