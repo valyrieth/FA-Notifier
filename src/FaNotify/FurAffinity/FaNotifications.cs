@@ -37,6 +37,9 @@ internal static partial class FaNotifications
     [GeneratedRegex(@"cid:(?<id>\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex CommentIdPattern();
 
+    [GeneratedRegex(@"/pms/\d+/(?<id>\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex NoteIdPattern();
+
     [GeneratedRegex(@"/user/(?<name>[^/]+)", RegexOptions.IgnoreCase)]
     private static partial Regex UserNamePattern();
 
@@ -112,7 +115,12 @@ internal static partial class FaNotifications
             }
 
             // Only ever read the type's own section; a missing section must never fall back to the whole page.
-            var sectionId = type == "comments" ? "messages-comments-submission" : $"messages-{type}";
+            var sectionId = type switch
+            {
+                "comments" => "messages-comments-submission",
+                "notes" => "notes-list",
+                _ => $"messages-{type}"
+            };
             var section = detail.Document.DocumentNode.SelectSingleNode($"//*[@id='{sectionId}']");
             var rows = section is null ? null : GetRows(section, type);
             var pageItems = rows?.Select(row => ParseItem(row, type, detail.Uri))
@@ -326,6 +334,7 @@ internal static partial class FaNotifications
             "submissions" when MatchId(ViewIdPattern(), itemUri) is { } viewId => $"submissions:{viewId}",
             "journals" when MatchId(JournalIdPattern(), itemUri) is { } journalId => $"journals:{journalId}",
             "comments" when CommentIdPattern().Match(itemUri.Fragment) is { Success: true } comment => $"comments:{comment.Groups["id"].Value}",
+            "notes" when NoteIdPattern().Match(itemUri.AbsolutePath) is { Success: true } note => $"notes:{note.Groups["id"].Value}",
             "favorites" when MatchId(ViewIdPattern(), itemUri) is { } favoritedViewId && !string.IsNullOrWhiteSpace(actorName)
                 => $"favorites:{favoritedViewId}:{actorName.ToLowerInvariant()}",
             _ => null
