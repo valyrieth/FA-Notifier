@@ -5,7 +5,8 @@ COPY Directory.Build.props FaNotify.slnx ./
 COPY src/FaNotify/FaNotify.csproj src/FaNotify/
 RUN dotnet restore
 COPY src/ src/
-RUN dotnet publish src/FaNotify -c Release --no-restore -p:UseAppHost=false -o /out
+ARG VERSION=dev
+RUN dotnet publish src/FaNotify -c Release --no-restore -p:UseAppHost=false -p:InformationalVersion=${VERSION} -o /out
 
 FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine
 WORKDIR /app

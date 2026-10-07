@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using FaNotify.Configuration;
 using FaNotify.Discord;
 using FaNotify.FurAffinity;
@@ -43,7 +44,9 @@ internal sealed class NotifierWorker(
             await FlareSolverr.WaitUntilReadyAsync(solverClient, logger, stoppingToken);
         }
 
-        logger.Started(config.IntervalMinutes);
+        logger.Started(
+            typeof(NotifierWorker).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
+            config.IntervalMinutes);
         await CheckCookieExpiryAsync(discordClient, stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {

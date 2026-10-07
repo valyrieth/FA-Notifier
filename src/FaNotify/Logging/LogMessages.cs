@@ -16,8 +16,8 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Information, Message = "Waiting for FlareSolverr to start...")]
     public static partial void SolverWaiting(this ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "FA Notify started. Normal check interval: {Minutes} minutes.")]
-    public static partial void Started(this ILogger logger, int minutes);
+    [LoggerMessage(Level = LogLevel.Information, Message = "FA Notify {Version} started. Normal check interval: {Minutes} minutes.")]
+    public static partial void Started(this ILogger logger, string version, int minutes);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Starting Fur Affinity check.")]
     public static partial void CheckStarting(this ILogger logger);
