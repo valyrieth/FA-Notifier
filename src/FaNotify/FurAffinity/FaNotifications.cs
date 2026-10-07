@@ -337,7 +337,7 @@ internal static partial class FaNotifications
         }
 
         var identity = $"{type}\n{itemUri.AbsoluteUri}\n{actorName}\n{description}";
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+        return $"{type}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)))[..12].ToLowerInvariant()}";
     }
 
     private static string? MatchId(Regex pattern, Uri uri)
