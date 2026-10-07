@@ -1,6 +1,29 @@
-# FurAffinity Notify - FurAffinity Notification Tool
+# FurAffinity Notify
 
-A .NET 10 worker that checks Fur Affinity notifications and posts them to Discord.
+Get your Fur Affinity notifications in Discord. The notifier signs in with your browser session, checks your notification pages on a schedule, and posts each new item to a Discord channel as its own message.
+
+It reports new **submissions, watches, comments, favorites, journals and notes**. You choose which types you want, and every item is sent only once.
+
+## What you need
+
+- A machine that is always on, with [Docker](https://docs.docker.com/get-docker/) and Docker Compose.
+- A Fur Affinity account, signed in on a browser (used once to export your login).
+- A Discord server where you can create a webhook.
+
+## Quick start
+
+1. **Export your login** to `cookies.txt` in this folder ([step 1](#1-export-fur-affinity-cookies)).
+2. **Create a Discord webhook** and copy its URL ([step 2](#2-create-a-discord-webhook)).
+3. **Configure and start** ([step 3](#3-configure-and-start-the-notifier)):
+
+   ```sh
+   cp settings.example.json settings.json     # then paste your webhook URL into it
+   mkdir -p fa-notifier/data fa-notifier/logs
+   PUID="$(id -u)" PGID="$(id -g)" docker compose up -d --build
+   docker compose logs -f fa-notify           # the first line shows the version
+   ```
+
+The first check sends every notification you currently have unread, so expect a burst of messages on first start. To update later, run `git pull` and the same `docker compose up -d --build`.
 
 ## Setup
 
@@ -74,7 +97,7 @@ Edit `settings.json`; `//` comments and trailing commas are allowed:
 | `notificationPrefix` | Empty | Optional text prepended to Discord messages. |
 | `userAgent` | Firefox UA | User-Agent sent to FurAffinity. |
 | `useFlareSolverr` | `false` | Fall back to the optional browser-based FlareSolverr service when Cloudflare blocks a normal request. |
-| `flareSolverrUrl` | `http://flaresolverr:8191/v1` | FlareSolverr API endpoint. Change it if you rename the Compose service or run the solver elsewhere. |
+| `flareSolverrUrl` | `http://flaresolverr:8191/v1` | FlareSolverr API endpoint. `settings.example.json` sets `http://fa-solver:8191/v1` to match the Compose service; change it if you rename the service or run the solver elsewhere. |
 
 ## Reliability
 
@@ -110,9 +133,32 @@ The notifier logs when the Fur Affinity login cookies (`a` and `b`) expire: once
 
 If Fur Affinity renews the session cookies in a response, the notifier stores the new values in `./fa-notifier/data/cookies-refreshed.txt` and uses that file on later starts, so the session can outlast the original export. Replacing `cookies.txt` with a new export discards the renewed copy automatically. Renewal is only tracked for normal requests, not requests made through FlareSolverr.
 
-Every check loads the detail page of each category that has unread items, so a new item is found even when the unread count does not change (for example, one item is read while another arrives). Items already delivered are skipped using IDs stored in `./fa-notifier/data/notifications.json`. Submissions and journals are identified by their Fur Affinity view or journal ID, and favorites by view ID plus the user who favorited it, so edits to a title or description do not cause a repeat. Other types (watches, comments, notes) use a hash of their link, user, and text. The first check sends all current unread items. Here, “seen” means successfully sent by this notifier; it is not a Discord read receipt or a mark-as-read action on Fur Affinity. If a category's row markup is not recognized, the notifier falls back to a count-only alert. Failed checks do not change the saved state, and a failed Discord send keeps only the batches Discord accepted.
+### Detecting new items
+
+Every check loads the detail page of each category that has unread items, so a new item is found even when the unread count does not change (for example, one item is read while another arrives). Items already delivered are skipped using IDs stored in `./fa-notifier/data/notifications.json`:
+
+| Type | ID |
+| --- | --- |
+| Submissions | `submissions:<view id>` |
+| Journals | `journals:<journal id>` |
+| Comments | `comments:<comment id>` |
+| Favorites | `favorites:<view id>:<user>` |
+| Watches, notes | `<type>:<short hash of link, user and text>` |
+
+Edits to a title or description therefore do not cause a repeat. The first check sends all current unread items. Here, “seen” means successfully sent by this notifier; it is not a Discord read receipt or a mark-as-read action on Fur Affinity. If a category's row markup is not recognized, the notifier falls back to a count-only alert. Failed checks do not change the saved state, and a failed Discord send keeps only the batches Discord accepted.
 
 If Fur Affinity redirects to login, refresh `cookies.txt` and restart the container.
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| Discord alert “FurAffinity check failed”, or the log mentions a login redirect | The session expired. Export a fresh `cookies.txt`, replace the file and run `docker compose restart fa-notify`. |
+| HTTP 403 mentioning Cloudflare | Fur Affinity is challenging the request. Check that `userAgent` matches the browser you exported from, or enable the [optional solver](#optional-cloudflare-solver). |
+| Nothing arrives in Discord | Run `docker compose logs fa-notify`. Check the webhook URL, that the type is in `notifyOn`, and that there really are unread notifications. |
+| Container shows `unhealthy` | Checks have been failing for several polls; see the log for the reason. |
+| Permission errors on `fa-notifier/` | Create the folders before starting and pass `PUID`/`PGID` as shown above. |
+| Need more detail | Set `logLevel` to `Debug` in `settings.json` and restart. |
 
 ## Security
 
