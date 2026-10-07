@@ -119,11 +119,22 @@ internal static partial class FaNotifications
             {
                 "comments" => "messages-comments-submission",
                 "notes" => "notes-list",
+                "submissions" => "messagecenter-submissions",
                 _ => $"messages-{type}"
             };
             var section = detail.Document.DocumentNode.SelectSingleNode($"//*[@id='{sectionId}']");
+            if (section is null)
+            {
+                logger.SectionNotFound(type, sectionId, detail.Uri.AbsolutePath, GetKnownIds(detail.Document));
+            }
+
             var rows = section is null ? null : GetRows(section, type);
-            var pageItems = rows?.Select(row => ParseItem(row, type, detail.Uri))
+            if (section is not null && rows is null)
+            {
+                logger.NoRowsInSection(type, sectionId, detail.Uri.AbsolutePath, Snippet(section));
+            }
+
+            var pageItems = rows?.Select(row => ParseItem(row, type, detail.Uri, logger))
                 .OfType<NotificationItem>()
                 .ToArray() ?? [];
 
@@ -226,11 +237,12 @@ internal static partial class FaNotifications
         return document;
     }
 
-    private static NotificationItem? ParseItem(HtmlNode row, string type, Uri pageUri)
+    private static NotificationItem? ParseItem(HtmlNode row, string type, Uri pageUri, ILogger logger)
     {
         var anchors = row.SelectNodes(".//a[@href]");
         if (anchors is null)
         {
+            logger.RowNotParsed(type, "the row has no links", Snippet(row));
             return null;
         }
 
@@ -244,8 +256,16 @@ internal static partial class FaNotifications
             primaryAnchor = anchors.FirstOrDefault(anchor => !IsUserHref(anchor.GetAttributeValue("href", string.Empty)));
         }
 
-        if (primaryAnchor is null || !TryGetFaUri(pageUri, primaryAnchor.GetAttributeValue("href", string.Empty), out var itemUri))
+        if (primaryAnchor is null)
         {
+            var hrefs = string.Join(", ", anchors.Select(anchor => anchor.GetAttributeValue("href", string.Empty)));
+            logger.RowNotParsed(type, $"none of its links look like a {type} link (links: {hrefs})", Snippet(row));
+            return null;
+        }
+
+        if (!TryGetFaUri(pageUri, primaryAnchor.GetAttributeValue("href", string.Empty), out var itemUri))
+        {
+            logger.RowNotParsed(type, $"link '{primaryAnchor.GetAttributeValue("href", string.Empty)}' is not a Fur Affinity URL", Snippet(row));
             return null;
         }
 
@@ -441,6 +461,15 @@ internal static partial class FaNotifications
     }
 
     private static string FirstNonEmpty(params string?[] values) => values.Select(NormalizeText).FirstOrDefault(value => value is not null) ?? "FurAffinity notification";
+
+    private static string Snippet(HtmlNode node) => Limit(WhitespacePattern().Replace(node.OuterHtml, " ").Trim(), 400);
+
+    // Lists structural element ids so a renamed section is easy to spot in the log.
+    private static string GetKnownIds(HtmlDocument document) => string.Join(
+        ", ",
+        document.DocumentNode.SelectNodes("//*[@id][self::section or self::div or self::ul or self::form or self::table]")
+            ?.Select(node => node.Id)
+            .Take(30) ?? Enumerable.Empty<string>());
 
     private static string Limit(string text, int maxLength) => text.Length <= maxLength ? text : text[..(maxLength - 3)] + "...";
 

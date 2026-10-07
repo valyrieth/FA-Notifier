@@ -97,11 +97,20 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Error, Message = "Could not send {Alert} alert to Discord: {Message}")]
     public static partial void StatusAlertFailed(this ILogger logger, string alert, string message);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "No category URL found for {Type}; using a count-only fallback.")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "No link to the {Type} notifications was found on the Fur Affinity home page, so no item details can be read; sending a count-only alert.")]
     public static partial void NoCategoryUrl(this ILogger logger, string type);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Parsed no {Type} notification items from {Rows} row(s); using a count-only fallback.")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "Parsed no {Type} notification items from {Rows} row(s); sending a count-only alert instead.")]
     public static partial void ParsedNoItems(this ILogger logger, string type, int rows);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not find the '{SectionId}' section for {Type} notifications on {Path}. Fur Affinity's markup may have changed. Element ids on the page: {KnownIds}")]
+    public static partial void SectionNotFound(this ILogger logger, string type, string sectionId, string path, string knownIds);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "The '{SectionId}' section for {Type} notifications was found on {Path} but no unread rows matched. Section starts with: {Snippet}")]
+    public static partial void NoRowsInSection(this ILogger logger, string type, string sectionId, string path, string snippet);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not parse a {Type} notification row: {Reason}. Row: {Snippet}")]
+    public static partial void RowNotParsed(this ILogger logger, string type, string reason, string snippet);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Parsed {Count} {Type} notification item(s).")]
     public static partial void ParsedItems(this ILogger logger, int count, string type);
