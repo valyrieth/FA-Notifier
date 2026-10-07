@@ -1,1 +1,2 @@
 browser-cookie3>=0.19
+rich>=13
