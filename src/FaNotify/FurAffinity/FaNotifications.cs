@@ -291,7 +291,7 @@ internal static partial class FaNotifications
             actorName,
             actorUrl,
             GetImageUrl(artwork, pageUri),
-            GetImageUrl(icon, pageUri),
+            GetImageUrl(icon, pageUri) ?? GetAvatarUrl(actorAnchor),
             GetOccurredAt(row));
     }
 
@@ -300,6 +300,10 @@ internal static partial class FaNotifications
         var match = UserNamePattern().Match(anchor?.GetAttributeValue("href", string.Empty) ?? string.Empty);
         return match.Success ? Uri.UnescapeDataString(match.Groups["name"].Value) : null;
     }
+
+    // Comment, favorite and note rows have no avatar markup, but FA serves the current one at /<username>.gif.
+    private static string? GetAvatarUrl(HtmlNode? actorAnchor) =>
+        GetUserNameFromHref(actorAnchor) is { } name ? $"https://a.furaffinity.net/{Uri.EscapeDataString(name.ToLowerInvariant())}.gif" : null;
 
     private static string? GetRating(HtmlNode row)
     {
