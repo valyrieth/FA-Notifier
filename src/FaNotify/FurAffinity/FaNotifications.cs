@@ -34,6 +34,9 @@ internal static partial class FaNotifications
     [GeneratedRegex(@"/journal/(?<id>\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex JournalIdPattern();
 
+    [GeneratedRegex(@"cid:(?<id>\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex CommentIdPattern();
+
     [GeneratedRegex(@"/user/(?<name>[^/]+)", RegexOptions.IgnoreCase)]
     private static partial Regex UserNamePattern();
 
@@ -82,6 +85,9 @@ internal static partial class FaNotifications
 
         var items = new List<NotificationItem>();
         var countFallbacks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Comments, favorites, journals... all live on /msg/others/, so each page is downloaded once.
+        var detailPages = new Dictionary<string, (HtmlDocument Document, Uri Uri)>(StringComparer.OrdinalIgnoreCase);
         foreach (var type in NotificationTypes.All)
         {
             var currentCount = notifications[type];
@@ -97,12 +103,19 @@ internal static partial class FaNotifications
                 continue;
             }
 
-            var detailPage = await DownloadPageAsync(client, solverClient, cookies, useFlareSolverr, logger, categoryUrl, cancellationToken);
-            var detailDocument = ParseDocument(detailPage);
+            var pageKey = categoryUrl.GetLeftPart(UriPartial.Query);
+            if (!detailPages.TryGetValue(pageKey, out var detail))
+            {
+                var detailPage = await DownloadPageAsync(client, solverClient, cookies, useFlareSolverr, logger, categoryUrl, cancellationToken);
+                detail = (ParseDocument(detailPage), detailPage.Uri);
+                detailPages[pageKey] = detail;
+            }
+
+            // Only ever read the type's own section; a missing section must never fall back to the whole page.
             var sectionId = type == "comments" ? "messages-comments-submission" : $"messages-{type}";
-            var section = detailDocument.DocumentNode.SelectSingleNode($"//*[@id='{sectionId}']");
+            var section = detail.Document.DocumentNode.SelectSingleNode($"//*[@id='{sectionId}']");
             var rows = section is null ? null : GetRows(section, type);
-            var pageItems = rows?.Select(row => ParseItem(row, type, detailPage.Uri))
+            var pageItems = rows?.Select(row => ParseItem(row, type, detail.Uri))
                 .OfType<NotificationItem>()
                 .ToArray() ?? [];
 
@@ -308,6 +321,7 @@ internal static partial class FaNotifications
         {
             "submissions" when MatchId(ViewIdPattern(), itemUri) is { } viewId => $"submissions:{viewId}",
             "journals" when MatchId(JournalIdPattern(), itemUri) is { } journalId => $"journals:{journalId}",
+            "comments" when CommentIdPattern().Match(itemUri.Fragment) is { Success: true } comment => $"comments:{comment.Groups["id"].Value}",
             "favorites" when MatchId(ViewIdPattern(), itemUri) is { } favoritedViewId && !string.IsNullOrWhiteSpace(actorName)
                 => $"favorites:{favoritedViewId}:{actorName.ToLowerInvariant()}",
             _ => null
@@ -413,7 +427,7 @@ internal static partial class FaNotifications
         return WhitespacePattern().Replace(HtmlEntity.DeEntitize(text), " ").Trim();
     }
 
-    private static string FirstNonEmpty(params string?[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "FurAffinity notification";
+    private static string FirstNonEmpty(params string?[] values) => values.Select(NormalizeText).FirstOrDefault(value => value is not null) ?? "FurAffinity notification";
 
     private static string Limit(string text, int maxLength) => text.Length <= maxLength ? text : text[..(maxLength - 3)] + "...";
 
