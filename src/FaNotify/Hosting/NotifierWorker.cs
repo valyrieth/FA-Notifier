@@ -19,8 +19,7 @@ internal sealed class NotifierWorker(
     IHttpClientFactory httpClientFactory,
     ILogger<NotifierWorker> logger) : BackgroundService
 {
-    private const int RegisteredUserThreshold = 15000;
-    private const int LowTrafficIntervalMinutes = 1;
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan CookieExpiryWarning = TimeSpan.FromHours(24);
     private static readonly TimeSpan HealthGracePeriod = TimeSpan.FromMinutes(5);
 
@@ -34,8 +33,6 @@ internal sealed class NotifierWorker(
         var discordClient = httpClientFactory.CreateClient(HttpClientNames.Discord);
         var solverClient = httpClientFactory.CreateClient(HttpClientNames.Solver);
         var state = StateFile.Load(config.StateFile);
-        var fastPolling = false;
-        var startupStatusLogged = false;
         var failureAlertSent = false;
         var consecutiveFailures = 0;
 
@@ -63,16 +60,10 @@ internal sealed class NotifierWorker(
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
                     logger.SnapshotReceived(
-                        snapshot.RegisteredUsers,
                         string.Join(", ", snapshot.Counts.Select(pair => $"{pair.Key}={pair.Value}")),
                         snapshot.Items.Count,
                         snapshot.CountFallbacks.Count);
                 }
-
-                var wasFastPolling = fastPolling;
-                fastPolling = snapshot.RegisteredUsers < RegisteredUserThreshold;
-                LogPollingStatus(startupStatusLogged, wasFastPolling, fastPolling, snapshot.RegisteredUsers);
-                startupStatusLogged = true;
 
                 var newItems = CollectNewItems(snapshot, state);
                 if (newItems.Count > 0)
@@ -137,10 +128,19 @@ internal sealed class NotifierWorker(
 
             try
             {
-                var interval = TimeSpan.FromMinutes(fastPolling ? LowTrafficIntervalMinutes : config.IntervalMinutes);
-                var delay = interval + Jitter(interval);
-                logger.NextCheck(delay.TotalMinutes);
-                await Task.Delay(delay, stoppingToken);
+                var interval = TimeSpan.FromMinutes(config.IntervalMinutes);
+                if (consecutiveFailures > 0)
+                {
+                    var delay = RetryDelay(interval, consecutiveFailures);
+                    logger.RetryBackoff(consecutiveFailures, delay.TotalMinutes);
+                    await Task.Delay(delay, stoppingToken);
+                }
+                else
+                {
+                    var delay = interval + Jitter(interval);
+                    logger.NextCheck(delay.TotalMinutes);
+                    await Task.Delay(delay, stoppingToken);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -149,34 +149,18 @@ internal sealed class NotifierWorker(
         }
     }
 
+    // Doubles the wait after each consecutive failure (1, 2, 4... intervals), never exceeding MaxRetryDelay
+    // unless the configured interval is itself longer.
+    private static TimeSpan RetryDelay(TimeSpan interval, int consecutiveFailures)
+    {
+        var cap = interval > MaxRetryDelay ? interval : MaxRetryDelay;
+        var multiplier = Math.Pow(2, Math.Min(consecutiveFailures - 1, 16));
+        var delay = TimeSpan.FromTicks((long)Math.Min(interval.Ticks * multiplier, cap.Ticks));
+        return delay + Jitter(delay);
+    }
+
     private static TimeSpan Jitter(TimeSpan interval) =>
         TimeSpan.FromSeconds(Random.Shared.NextDouble() * Math.Min(30, interval.TotalSeconds * 0.1));
-
-    private void LogPollingStatus(bool statusAlreadyLogged, bool wasFastPolling, bool fastPolling, int registeredUsers)
-    {
-        if (!statusAlreadyLogged)
-        {
-            if (fastPolling)
-            {
-                logger.PollingStartedFast(registeredUsers, RegisteredUserThreshold);
-            }
-            else
-            {
-                logger.PollingStartedNormal(registeredUsers, config.IntervalMinutes);
-            }
-        }
-        else if (wasFastPolling != fastPolling)
-        {
-            if (fastPolling)
-            {
-                logger.PollingSwitchedToFast(registeredUsers, RegisteredUserThreshold);
-            }
-            else
-            {
-                logger.PollingResumedNormal(registeredUsers, RegisteredUserThreshold, config.IntervalMinutes);
-            }
-        }
-    }
 
     private List<NotificationItem> CollectNewItems(NotificationSnapshot snapshot, NotificationState state)
     {

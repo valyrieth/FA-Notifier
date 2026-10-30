@@ -19,9 +19,6 @@ internal static partial class FaNotifications
     [GeneratedRegex(@"\d[\d,]*")]
     private static partial Regex CountPattern();
 
-    [GeneratedRegex(@"(?<count>\d[\d,]*)\s+registered\b", RegexOptions.IgnoreCase)]
-    private static partial Regex RegisteredUsersPattern();
-
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespacePattern();
 
@@ -56,7 +53,6 @@ internal static partial class FaNotifications
     {
         var homePage = await DownloadPageAsync(client, solverClient, cookies, useFlareSolverr, logger, HomePage, cancellationToken);
         var document = ParseDocument(homePage);
-        var registeredUsers = ParseRegisteredUserCount(document);
 
         var notifications = NotificationTypes.All.ToDictionary(type => type, _ => 0);
         var categoryUrls = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase);
@@ -150,18 +146,7 @@ internal static partial class FaNotifications
             }
         }
 
-        return new NotificationSnapshot(registeredUsers, notifications, categoryUrls, items, countFallbacks);
-    }
-
-    private static int ParseRegisteredUserCount(HtmlDocument document)
-    {
-        var match = RegisteredUsersPattern().Match(document.DocumentNode.InnerText);
-        if (!match.Success || !int.TryParse(match.Groups["count"].Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var count))
-        {
-            throw new InvalidDataException("Could not read Fur Affinity's registered-user count; notification state was not updated.");
-        }
-
-        return count;
+        return new NotificationSnapshot(notifications, categoryUrls, items, countFallbacks);
     }
 
     // FlareSolverr starts a real browser, so it is only used when Cloudflare actually challenges a normal request.

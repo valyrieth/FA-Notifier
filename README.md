@@ -104,7 +104,7 @@ Edit `settings.json`; `//` comments and trailing commas are allowed:
 | Setting | Default | Description |
 | --- | --- | --- |
 | `discordWebhookUrl` | Required | Discord channel webhook URL. Keep it private. |
-| `pollIntervalMinutes` | `30` | Normal check interval, plus up to 10% (at most 30 seconds) of random delay so requests are not perfectly periodic. Below 15,000 registered users online, checks switch to once per minute until the count reaches 15,000. |
+| `pollIntervalMinutes` | `1` | Check interval, plus up to 10% (at most 30 seconds) of random delay so requests are not perfectly periodic. After a failed check the wait doubles with each consecutive failure (1, 2, 4... intervals), capped at 5 minutes or the interval if longer, and returns to normal after the next successful check. |
 | `failureAlertThreshold` | `3` | Number of failed checks in a row before a Discord alert is sent. A login redirect (expired session) alerts immediately. |
 | `logLevel` | `Information` | Minimum log level: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical`, or `None`. |
 | `notifyOn` | All types | Notification types: `submissions`, `watches`, `comments`, `favorites`, `journals`, `notes`. |
@@ -139,8 +139,6 @@ The solver is not used for every request. The notifier makes normal requests fir
 ## Discord Notifications
 
 New items are sent as individual Discord embeds with their category, title, link, and available author/profile or submission artwork details. When the page provides an image or user icon, it is included in the embed. The embed's timestamp is the time Fur Affinity recorded for the event when the page shows one (watches, favorites, notes), otherwise the time the notifier saw it. Submissions show their rating (General, Mature, or Adult); the thumbnail is still included for every rating, so use an age-restricted Discord channel if you watch adult artists. Large batches are split to respect Discord's embed limits.
-
-At startup, the notifier logs the current Fur Affinity registered-user count. If it is below 15,000, it logs that checks are switching to once per minute. When the count reaches 15,000, it logs that normal polling has resumed. These status messages are written to the log file and container output, not sent to Discord.
 
 If checks keep failing, the notifier sends one Discord alert after `failureAlertThreshold` consecutive failures, so a single timeout or temporary 5xx does not page you. If Fur Affinity redirects to login (expired session cookies), the alert is sent immediately. It avoids repeating the alert for every failed poll and sends a recovery alert after the next successful check. Detailed failure information remains in the application log.
 

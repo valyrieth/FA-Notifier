@@ -22,20 +22,8 @@ internal static partial class LogMessages
     [LoggerMessage(Level = LogLevel.Debug, Message = "Starting Fur Affinity check.")]
     public static partial void CheckStarting(this ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Snapshot received: registered users={Users:N0}; category counts=[{Counts}]; parsed items={Items}; count fallbacks={Fallbacks}.")]
-    public static partial void SnapshotReceived(this ILogger logger, int users, string counts, int items, int fallbacks);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Fur Affinity reports {Users:N0} registered users online, below {Threshold:N0}. Polling every minute until the count reaches that number.")]
-    public static partial void PollingStartedFast(this ILogger logger, int users, int threshold);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Fur Affinity reports {Users:N0} registered users online. Polling every {Minutes} minutes.")]
-    public static partial void PollingStartedNormal(this ILogger logger, int users, int minutes);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Fur Affinity reports {Users:N0} registered users online, below {Threshold:N0}. Switching to one-minute polling.")]
-    public static partial void PollingSwitchedToFast(this ILogger logger, int users, int threshold);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Fur Affinity reports {Users:N0} registered users online, at or above {Threshold:N0}. Resuming the normal {Minutes}-minute polling interval.")]
-    public static partial void PollingResumedNormal(this ILogger logger, int users, int threshold, int minutes);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Snapshot received: category counts=[{Counts}]; parsed items={Items}; count fallbacks={Fallbacks}.")]
+    public static partial void SnapshotReceived(this ILogger logger, string counts, int items, int fallbacks);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping disabled notification type={Type}, id={Id}.")]
     public static partial void SkippingDisabledType(this ILogger logger, string type, string id);
@@ -90,6 +78,9 @@ internal static partial class LogMessages
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Next check in {Minutes:0.#} minute(s).")]
     public static partial void NextCheck(this ILogger logger, double minutes);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Check has failed {Count} time(s) in a row; retrying in {Minutes:0.#} minute(s).")]
+    public static partial void RetryBackoff(this ILogger logger, int count, double minutes);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sent {Alert} alert to Discord.")]
     public static partial void StatusAlertSent(this ILogger logger, string alert);
