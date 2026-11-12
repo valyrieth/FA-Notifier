@@ -8,7 +8,7 @@ COPY src/ src/
 ARG VERSION=0.0.0-dev
 RUN dotnet publish src/FaNotify -c Release --no-restore -p:UseAppHost=false -p:InformationalVersion=${VERSION} -o /out
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine
+FROM mcr.microsoft.com/dotnet/runtime:11.0-alpine
 WORKDIR /app
 RUN apk add --no-cache su-exec
 COPY --from=build /out .
